@@ -6,8 +6,12 @@
   <ItemGroup>
     <ClCompile Include="NodeJS.cpp" />
     <ClCompile Include="Logs\Logs.cpp" />
+    <ClCompile Include="ParserFunctionality\ParserFunctionality.cpp" />
+    <ClCompile Include="Utils\Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Logs\Logs.h" />
+    <ClInclude Include="ParserFunctionality\ParserFunctionality.h" />
+    <ClInclude Include="Utils\Utils.h" />
   </ItemGroup>
 </Project>
