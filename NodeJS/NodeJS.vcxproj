@@ -22,14 +22,16 @@
     <ResourceCompile Include="NodeJS.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Logs\Logs.cpp" />
+    <ClCompile Include="LogsFunctions\Logs.cpp" />
     <ClCompile Include="NodeJS.cpp" />
     <ClCompile Include="ParserFunctionality\ParserFunctionality.cpp" />
+    <ClCompile Include="ScriptExecutor\ScriptExecutor.cpp" />
     <ClCompile Include="Utils\Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Logs\Logs.h" />
+    <ClInclude Include="LogsFunctions\Logs.h" />
     <ClInclude Include="ParserFunctionality\ParserFunctionality.h" />
+    <ClInclude Include="ScriptExecutor\ScriptExecutor.h" />
     <ClInclude Include="Utils\Utils.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
