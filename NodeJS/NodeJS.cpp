@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include <cwctype>
 #include "../API/RainmeterAPI.h"
 #include "Logs/Logs.h"
 
@@ -43,6 +44,12 @@ struct Measure
         hOutputRead = NULL;
     }
 };
+
+// Forward declarations for helper functions
+std::wstring ParseAndBuildFunctionCall(const std::wstring& input);
+std::vector<std::wstring> ParseParameters(const std::wstring& paramString);
+bool IsNumeric(const std::wstring& str);
+std::wstring EscapeString(const std::wstring& str);
 
 // Helper function to check if Node.js is available
 bool FindNodeExecutable(std::wstring& nodePath)
@@ -190,7 +197,6 @@ console.info = (...args) => {
             // Add function execution
             wrapperScript += "\n\n// Execute the requested function\n";
             wrapperScript += "try {\n";
-            wrapperScript += "  if (typeof ";
 
             // Convert command to UTF8
             int cmdUtf8Length = WideCharToMultiByte(CP_UTF8, 0, command.c_str(), -1, NULL, 0, NULL, NULL);
@@ -199,33 +205,58 @@ console.info = (...args) => {
                 std::string cmdUtf8(cmdUtf8Length - 1, '\0');
                 WideCharToMultiByte(CP_UTF8, 0, command.c_str(), -1, &cmdUtf8[0], cmdUtf8Length, NULL, NULL);
 
-                wrapperScript += cmdUtf8;
-                wrapperScript += " === 'function') {\n";
-                wrapperScript += "    const result = ";
-                wrapperScript += cmdUtf8;
-                wrapperScript += "();\n";
-                wrapperScript += "    if (result !== undefined && result !== null) {\n";
-                wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
-                wrapperScript += "    }\n";
-                wrapperScript += "  } else {\n";
-                wrapperScript += "    if ('";
-                wrapperScript += cmdUtf8;
-                wrapperScript += "' === 'initialize' || '";
-                wrapperScript += cmdUtf8;
-                wrapperScript += "' === 'finalize') {\n";
-                wrapperScript += "      // Silent for initialize/finalize if not defined\n";
-                wrapperScript += "    } else if ('";
-                wrapperScript += cmdUtf8;
-                wrapperScript += "' !== 'update') {\n";
-                wrapperScript += "      console.error('Function ";
-                wrapperScript += cmdUtf8;
-                wrapperScript += " not found in script');\n";
-                wrapperScript += "    }\n";
-                wrapperScript += "  }\n";
-                wrapperScript += "} catch(e) {\n";
-                wrapperScript += "  console.error('NodeJS Plugin Error: ' + e.message);\n";
-                wrapperScript += "}";
+                // Handle special lifecycle functions
+                if (cmdUtf8 == "initialize")
+                {
+                    wrapperScript += "  if (typeof initialize === 'function') {\n";
+                    wrapperScript += "    const result = initialize();\n";
+                    wrapperScript += "    if (result !== undefined && result !== null) {\n";
+                    wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
+                    wrapperScript += "    }\n";
+                    wrapperScript += "  }\n";
+                }
+                else if (cmdUtf8 == "finalize")
+                {
+                    wrapperScript += "  if (typeof finalize === 'function') {\n";
+                    wrapperScript += "    const result = finalize();\n";
+                    wrapperScript += "    if (result !== undefined && result !== null) {\n";
+                    wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
+                    wrapperScript += "    }\n";
+                    wrapperScript += "  }\n";
+                }
+                else if (cmdUtf8 == "update")
+                {
+                    wrapperScript += "  if (typeof update === 'function') {\n";
+                    wrapperScript += "    const result = update();\n";
+                    wrapperScript += "    if (result !== undefined && result !== null) {\n";
+                    wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
+                    wrapperScript += "    }\n";
+                    wrapperScript += "  }\n";
+                }
+                else if (cmdUtf8 == "getString")
+                {
+                    wrapperScript += "  if (typeof getString === 'function') {\n";
+                    wrapperScript += "    const result = getString();\n";
+                    wrapperScript += "    if (result !== undefined && result !== null) {\n";
+                    wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
+                    wrapperScript += "    }\n";
+                    wrapperScript += "  }\n";
+                }
+                else
+                {
+                    // For any other command, evaluate it directly as JavaScript code
+                    wrapperScript += "  const result = eval('";
+                    wrapperScript += cmdUtf8;
+                    wrapperScript += "');\n";
+                    wrapperScript += "  if (result !== undefined && result !== null) {\n";
+                    wrapperScript += "    process.stdout.write('RESULT:' + String(result) + '\\n');\n";
+                    wrapperScript += "  }\n";
+                }
             }
+
+            wrapperScript += "} catch(e) {\n";
+            wrapperScript += "  console.error('NodeJS Plugin Error: ' + e.message);\n";
+            wrapperScript += "}";
 
             DWORD bytesWritten;
             WriteFile(hFile, wrapperScript.c_str(), static_cast<DWORD>(wrapperScript.length()), &bytesWritten, NULL);
@@ -264,16 +295,53 @@ console.info = (...args) => {
         jsCode << L"} ";
         jsCode << L"const scriptContent = fs.readFileSync(scriptPath, 'utf8'); ";
         jsCode << L"eval(scriptContent); ";
-        jsCode << L"if (typeof " << command << L" === 'function') { ";
-        jsCode << L"const result = " << command << L"(); ";
-        jsCode << L"if (result !== undefined && result !== null) { ";
-        jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
-        jsCode << L"} ";
-        jsCode << L"} else { ";
-        jsCode << L"if ('" << command << L"' !== 'update') { ";
-        jsCode << L"console.error('Function " << command << L" not found in script'); ";
-        jsCode << L"} ";
-        jsCode << L"} ";
+
+        // Handle different command types
+        if (command == L"initialize")
+        {
+            jsCode << L"if (typeof initialize === 'function') { ";
+            jsCode << L"const result = initialize(); ";
+            jsCode << L"if (result !== undefined && result !== null) { ";
+            jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
+            jsCode << L"} ";
+            jsCode << L"} ";
+        }
+        else if (command == L"finalize")
+        {
+            jsCode << L"if (typeof finalize === 'function') { ";
+            jsCode << L"const result = finalize(); ";
+            jsCode << L"if (result !== undefined && result !== null) { ";
+            jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
+            jsCode << L"} ";
+            jsCode << L"} ";
+        }
+        else if (command == L"update")
+        {
+            jsCode << L"if (typeof update === 'function') { ";
+            jsCode << L"const result = update(); ";
+            jsCode << L"if (result !== undefined && result !== null) { ";
+            jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
+            jsCode << L"} ";
+            jsCode << L"} ";
+        }
+        else if (command == L"getString")
+        {
+            jsCode << L"if (typeof getString === 'function') { ";
+            jsCode << L"const result = getString(); ";
+            jsCode << L"if (result !== undefined && result !== null) { ";
+            jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
+            jsCode << L"} ";
+            jsCode << L"} ";
+        }
+        else
+        {
+            // For any other command, evaluate it directly
+            jsCode << L"const result = eval('" << command << L"'); ";
+            jsCode << L"if (result !== undefined && result !== null) { ";
+            jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
+            jsCode << L"} ";
+        }
+
         jsCode << L"} catch(e) { ";
         jsCode << L"console.error('NodeJS Plugin Error: ' + e.message); ";
         jsCode << L"}";
@@ -376,6 +444,189 @@ console.info = (...args) => {
     return result;
 }
 
+// Helper function to parse and build proper function calls
+std::wstring ParseAndBuildFunctionCall(const std::wstring& input)
+{
+    // Remove leading/trailing whitespace
+    std::wstring trimmed = input;
+    size_t start = trimmed.find_first_not_of(L" \t\r\n");
+    if (start == std::wstring::npos) return L"";
+
+    size_t end = trimmed.find_last_not_of(L" \t\r\n");
+    trimmed = trimmed.substr(start, end - start + 1);
+
+    // If the input already looks like a proper function call (contains parentheses), use it as-is
+    if (trimmed.find(L'(') != std::wstring::npos && trimmed.find(L')') != std::wstring::npos)
+    {
+        return trimmed;
+    }
+
+    // Parse function name and parameters from formats like:
+    // "FunctionName"
+    // "FunctionName param1"
+    // "FunctionName param1 param2"
+    // "FunctionName(param1, param2)" - already handled above
+
+    size_t spacePos = trimmed.find(L' ');
+    std::wstring functionName;
+    std::wstring parameters;
+
+    if (spacePos == std::wstring::npos)
+    {
+        // No parameters, just function name
+        functionName = trimmed;
+        return functionName + L"()";
+    }
+    else
+    {
+        // Extract function name and parameters
+        functionName = trimmed.substr(0, spacePos);
+        parameters = trimmed.substr(spacePos + 1);
+
+        // Parse parameters - split by spaces but respect quoted strings
+        std::vector<std::wstring> params = ParseParameters(parameters);
+
+        // Build function call
+        std::wstring functionCall = functionName + L"(";
+        for (size_t i = 0; i < params.size(); ++i)
+        {
+            if (i > 0) functionCall += L", ";
+
+            // Check if parameter looks like a number
+            if (IsNumeric(params[i]))
+            {
+                functionCall += params[i];
+            }
+            else if (params[i] == L"true" || params[i] == L"false")
+            {
+                // Boolean values
+                functionCall += params[i];
+            }
+            else if (params[i] == L"null" || params[i] == L"undefined")
+            {
+                // Null/undefined values
+                functionCall += params[i];
+            }
+            else
+            {
+                // String parameter - add quotes if not already quoted
+                if (params[i].front() != L'"' && params[i].front() != L'\'')
+                {
+                    functionCall += L"\"" + EscapeString(params[i]) + L"\"";
+                }
+                else
+                {
+                    functionCall += params[i];
+                }
+            }
+        }
+        functionCall += L")";
+
+        return functionCall;
+    }
+}
+
+// Helper function to parse parameters, respecting quoted strings
+std::vector<std::wstring> ParseParameters(const std::wstring& paramString)
+{
+    std::vector<std::wstring> params;
+    std::wstring current;
+    bool inQuotes = false;
+    wchar_t quoteChar = L'\0';
+
+    for (size_t i = 0; i < paramString.length(); ++i)
+    {
+        wchar_t c = paramString[i];
+
+        if (!inQuotes && (c == L'"' || c == L'\''))
+        {
+            // Starting a quoted string
+            inQuotes = true;
+            quoteChar = c;
+            current += c;
+        }
+        else if (inQuotes && c == quoteChar)
+        {
+            // Ending a quoted string (check for escape)
+            if (i > 0 && paramString[i - 1] == L'\\')
+            {
+                current += c; // Escaped quote
+            }
+            else
+            {
+                inQuotes = false;
+                current += c;
+            }
+        }
+        else if (!inQuotes && (c == L' ' || c == L'\t'))
+        {
+            // Parameter separator
+            if (!current.empty())
+            {
+                params.push_back(current);
+                current.clear();
+            }
+        }
+        else
+        {
+            current += c;
+        }
+    }
+
+    // Add the last parameter
+    if (!current.empty())
+    {
+        params.push_back(current);
+    }
+
+    return params;
+}
+
+// Helper function to check if a string represents a number
+bool IsNumeric(const std::wstring& str)
+{
+    if (str.empty()) return false;
+
+    size_t start = 0;
+    if (str[0] == L'-' || str[0] == L'+') start = 1;
+    if (start >= str.length()) return false;
+
+    bool hasDecimal = false;
+    for (size_t i = start; i < str.length(); ++i)
+    {
+        if (str[i] == L'.')
+        {
+            if (hasDecimal) return false; // Multiple decimals
+            hasDecimal = true;
+        }
+        else if (!std::iswdigit(str[i]))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Helper function to escape strings for JavaScript
+std::wstring EscapeString(const std::wstring& str)
+{
+    std::wstring escaped;
+    for (wchar_t c : str)
+    {
+        switch (c)
+        {
+        case L'"':  escaped += L"\\\""; break;
+        case L'\\': escaped += L"\\\\"; break;
+        case L'\n': escaped += L"\\n"; break;
+        case L'\r': escaped += L"\\r"; break;
+        case L'\t': escaped += L"\\t"; break;
+        default:    escaped += c; break;
+        }
+    }
+    return escaped;
+}
+
 PLUGIN_EXPORT void Initialize(void** data, void* rm)
 {
     Measure* measure = new Measure;
@@ -449,7 +700,7 @@ PLUGIN_EXPORT void Reload(void* data, void* rm, double* maxValue)
         Logger::LogNotice(L"Using script file: " + measure->scriptPath);
     }
 
-    // Call initialize function
+    // Try to call initialize function, but don't fail if it doesn't exist
     std::wstring result = ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, measure->inlineScript, measure->useInlineScript, L"initialize");
 
     // Only log the result if it's not empty (console logs are handled separately now)
@@ -470,7 +721,7 @@ PLUGIN_EXPORT double Update(void* data)
         return 0.0;
     }
 
-    // Call update function in the script
+    // Try to call update function, but don't fail if it doesn't exist
     std::wstring result = ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, measure->inlineScript, measure->useInlineScript, L"update");
 
     if (!result.empty())
@@ -507,30 +758,51 @@ PLUGIN_EXPORT LPCWSTR GetString(void* data)
         return measure->lastResult.c_str();
     }
 
-    // Otherwise call a getString function in the script
+    // Otherwise try to call a getString function in the script
     std::wstring result = ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, measure->inlineScript, measure->useInlineScript, L"getString");
     measure->lastResult = result;
     return measure->lastResult.c_str();
 }
 
+// Enhanced ExecuteBang function with parameter parsing
 PLUGIN_EXPORT void ExecuteBang(void* data, LPCWSTR args)
 {
     Measure* measure = static_cast<Measure*>(data);
 
     if (!measure->nodeFound || !measure->initialized)
     {
+        Logger::LogWarning(L"Cannot execute bang: Node.js not found or plugin not initialized");
         return;
     }
 
-    // Convert args to string and execute as a function call
+    // Convert args to string
     std::wstring command = args ? args : L"";
-    if (!command.empty())
+    if (command.empty())
     {
-        std::wstring result = ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, measure->inlineScript, measure->useInlineScript, command);
-        if (!result.empty())
-        {
-            Logger::LogDebug(L"Bang '" + command + L"' returned: " + result);
-        }
+        Logger::LogWarning(L"Empty command provided to ExecuteBang");
+        return;
+    }
+
+    // Parse the command to extract function name and parameters
+    std::wstring functionCall = ParseAndBuildFunctionCall(command);
+
+    if (functionCall.empty())
+    {
+        Logger::LogError(L"Failed to parse function call: " + command);
+        return;
+    }
+
+    Logger::LogDebug(L"Executing function call: " + functionCall);
+
+    // Execute the parsed function call
+    std::wstring result = ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath,
+        measure->inlineScript, measure->useInlineScript, functionCall);
+
+    // Store result for potential retrieval
+    if (!result.empty())
+    {
+        measure->lastResult = result;
+        Logger::LogDebug(L"Bang '" + command + L"' returned: " + result);
     }
 }
 
@@ -540,7 +812,7 @@ PLUGIN_EXPORT void Finalize(void* data)
 
     if (measure->nodeFound && measure->initialized)
     {
-        // Call finalize function in the script
+        // Try to call finalize function, but don't fail if it doesn't exist
         ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, measure->inlineScript, measure->useInlineScript, L"finalize");
     }
 
