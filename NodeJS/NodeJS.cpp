@@ -151,7 +151,7 @@ PLUGIN_EXPORT double Update(void* data)
         {
             return std::stod(result);
         }
-        catch (const std::exception&)  // Removed unused variable 'e'
+        catch (const std::exception&)
         {
             Logger::LogDebug(L"Could not convert result to double: " + result);
             return 0.0;
@@ -186,6 +186,69 @@ PLUGIN_EXPORT LPCWSTR GetString(void* data)
     measure->lastResult = result;
     return measure->lastResult.c_str();
 }
+
+/**
+ * @brief Executes a JavaScript expression passed via a section variable.
+ * * This function is exposed to Rainmeter as a section variable function. It allows
+ * executing arbitrary JavaScript code.
+ * * @param data Pointer to the measure's data structure.
+ * @param argc The number of arguments.
+ * @param argv An array of wide string arguments. argv[0] contains the JS code.
+ * @return LPCWSTR A pointer to a wide string containing the result of the execution.
+ * The pointer is to a static string, which remains valid after the function returns.
+ */
+PLUGIN_EXPORT LPCWSTR Execute(void* data, const int argc, const WCHAR* argv[])
+{
+    Measure* measure = static_cast<Measure*>(data);
+
+    if (!measure || !measure->nodeFound || !measure->initialized)
+    {
+        return L"";
+    }
+
+    if (argc < 1 || !argv || !argv[0])
+    {
+        return L"";
+    }
+
+    std::wstring command = argv[0];
+    if (command.empty())
+    {
+        Logger::LogWarning(L"Empty command provided to Execute");
+        return L"";
+    }
+
+    // The result must be stored in a static variable so the pointer remains valid.
+    static std::wstring persistentResult;
+
+    // Handle direct calls to MeterOption functions
+    if (MeterHelper::IsMeterFunction(command))
+    {
+        persistentResult = MeterHelper::ExecuteMeterFunction(measure, command);
+        Logger::LogDebug(L"Execute function '" + command + L"' returned: " + persistentResult);
+        return persistentResult.c_str();
+    }
+
+    // Execute other JavaScript expressions via Node.js
+    Logger::LogDebug(L"Executing expression: " + command);
+
+    std::wstring result = ScriptExecutor::ExecuteNodeCommand(
+        measure->nodeExecutable,
+        measure->scriptPath,
+        measure->inlineScript,
+        measure->useInlineScript,
+        command // Pass the raw JavaScript expression
+    );
+
+    persistentResult = result;
+    if (!persistentResult.empty())
+    {
+        Logger::LogDebug(L"Execute expression '" + command + L"' returned: " + persistentResult);
+    }
+    
+    return persistentResult.c_str();
+}
+
 
 PLUGIN_EXPORT void ExecuteBang(void* data, LPCWSTR args)
 {
