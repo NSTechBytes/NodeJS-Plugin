@@ -54,7 +54,6 @@ namespace ScriptExecutor
 
         if (useInline)
         {
-
             std::string wrapperScript = CreateInlineScriptWrapper(inlineScript, command);
 
             if (!CreateTempFile(wrapperScript, tempFile))
@@ -70,7 +69,6 @@ namespace ScriptExecutor
         }
         else
         {
-
             std::wstring jsCode = CreateFileScriptWrapper(scriptPath, command);
             cmdLine = L"\"" + nodeExe + L"\" -e \"" + jsCode + L"\"";
         }
@@ -158,7 +156,7 @@ namespace ScriptExecutor
         std::string cmdUtf8 = Utils::WideStringToUtf8(command);
 
         std::string wrapperScript = R"(
-
+// Console output redirection
 const originalConsole = {
     log: console.log,
     error: console.error,
@@ -187,6 +185,46 @@ console.info = (...args) => {
     process.stdout.write('LOG: ' + args.map(a => String(a)).join(' ') + '\n');
 };
 
+// Meter functions - these will be handled by the C++ plugin with new syntax
+global.MeterOption = {
+    GetX: function(meterName, defValue = '') {
+        throw new Error('MeterOption.GetX should be called via ExecuteBang, not directly in Node.js');
+    },
+    GetY: function(meterName, defValue = '') {
+        throw new Error('MeterOption.GetY should be called via ExecuteBang, not directly in Node.js');
+    },
+    GetW: function(meterName, defValue = '') {
+        throw new Error('MeterOption.GetW should be called via ExecuteBang, not directly in Node.js');
+    },
+    GetH: function(meterName, defValue = '') {
+        throw new Error('MeterOption.GetH should be called via ExecuteBang, not directly in Node.js');
+    },
+    SetX: function(meterName, value) {
+        throw new Error('MeterOption.SetX should be called via ExecuteBang, not directly in Node.js');
+    },
+    SetY: function(meterName, value) {
+        throw new Error('MeterOption.SetY should be called via ExecuteBang, not directly in Node.js');
+    },
+    SetW: function(meterName, value) {
+        throw new Error('MeterOption.SetW should be called via ExecuteBang, not directly in Node.js');
+    },
+    SetH: function(meterName, value) {
+        throw new Error('MeterOption.SetH should be called via ExecuteBang, not directly in Node.js');
+    },
+    Show: function(meterName) {
+        throw new Error('MeterOption.Show should be called via ExecuteBang, not directly in Node.js');
+    },
+    Hide: function(meterName) {
+        throw new Error('MeterOption.Hide should be called via ExecuteBang, not directly in Node.js');
+    },
+    GetProperty: function(meterName, property, defValue = '') {
+        throw new Error('MeterOption.GetProperty should be called via ExecuteBang, not directly in Node.js');
+    },
+    SetProperty: function(meterName, property, value) {
+        throw new Error('MeterOption.SetProperty should be called via ExecuteBang, not directly in Node.js');
+    }
+};
+
 )";
 
         wrapperScript += scriptUtf8;
@@ -197,15 +235,6 @@ console.info = (...args) => {
         {
             wrapperScript += "  if (typeof initialize === 'function') {\n";
             wrapperScript += "    const result = initialize();\n";
-            wrapperScript += "    if (result !== undefined && result !== null) {\n";
-            wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
-            wrapperScript += "    }\n";
-            wrapperScript += "  }\n";
-        }
-        else if (cmdUtf8 == "finalize")
-        {
-            wrapperScript += "  if (typeof finalize === 'function') {\n";
-            wrapperScript += "    const result = finalize();\n";
             wrapperScript += "    if (result !== undefined && result !== null) {\n";
             wrapperScript += "      process.stdout.write('RESULT:' + String(result) + '\\n');\n";
             wrapperScript += "    }\n";
@@ -231,7 +260,7 @@ console.info = (...args) => {
         }
         else
         {
-
+            // Custom function call
             wrapperScript += "  const result = eval('";
             wrapperScript += cmdUtf8;
             wrapperScript += "');\n";
@@ -255,12 +284,29 @@ console.info = (...args) => {
         jsCode << L"const path = require('path'); ";
         jsCode << L"const fs = require('fs'); ";
 
+        // Console redirection
         jsCode << L"const originalConsole = { log: console.log, error: console.error, warn: console.warn, debug: console.debug, info: console.info }; ";
         jsCode << L"console.log = (...args) => { process.stdout.write('LOG: ' + args.map(a => String(a)).join(' ') + '\\n'); }; ";
         jsCode << L"console.error = (...args) => { process.stderr.write('ERROR: ' + args.map(a => String(a)).join(' ') + '\\n'); }; ";
         jsCode << L"console.warn = (...args) => { process.stderr.write('WARNING: ' + args.map(a => String(a)).join(' ') + '\\n'); }; ";
         jsCode << L"console.debug = (...args) => { process.stdout.write('DEBUG: ' + args.map(a => String(a)).join(' ') + '\\n'); }; ";
         jsCode << L"console.info = (...args) => { process.stdout.write('LOG: ' + args.map(a => String(a)).join(' ') + '\\n'); }; ";
+
+        // Meter function placeholders with new syntax
+        jsCode << L"global.MeterOption = { ";
+        jsCode << L"GetX: function(meterName, defValue = '') { throw new Error('MeterOption.GetX should be called via ExecuteBang'); }, ";
+        jsCode << L"GetY: function(meterName, defValue = '') { throw new Error('MeterOption.GetY should be called via ExecuteBang'); }, ";
+        jsCode << L"GetW: function(meterName, defValue = '') { throw new Error('MeterOption.GetW should be called via ExecuteBang'); }, ";
+        jsCode << L"GetH: function(meterName, defValue = '') { throw new Error('MeterOption.GetH should be called via ExecuteBang'); }, ";
+        jsCode << L"SetX: function(meterName, value) { throw new Error('MeterOption.SetX should be called via ExecuteBang'); }, ";
+        jsCode << L"SetY: function(meterName, value) { throw new Error('MeterOption.SetY should be called via ExecuteBang'); }, ";
+        jsCode << L"SetW: function(meterName, value) { throw new Error('MeterOption.SetW should be called via ExecuteBang'); }, ";
+        jsCode << L"SetH: function(meterName, value) { throw new Error('MeterOption.SetH should be called via ExecuteBang'); }, ";
+        jsCode << L"Show: function(meterName) { throw new Error('MeterOption.Show should be called via ExecuteBang'); }, ";
+        jsCode << L"Hide: function(meterName) { throw new Error('MeterOption.Hide should be called via ExecuteBang'); }, ";
+        jsCode << L"GetProperty: function(meterName, property, defValue = '') { throw new Error('MeterOption.GetProperty should be called via ExecuteBang'); }, ";
+        jsCode << L"SetProperty: function(meterName, property, value) { throw new Error('MeterOption.SetProperty should be called via ExecuteBang'); } ";
+        jsCode << L"}; ";
 
         jsCode << L"try { ";
         jsCode << L"const scriptPath = '" << normalizedPath << "'; ";
@@ -308,7 +354,7 @@ console.info = (...args) => {
         }
         else
         {
-
+            // Custom function call
             jsCode << L"const result = eval('" << command << L"'); ";
             jsCode << L"if (result !== undefined && result !== null) { ";
             jsCode << L"process.stdout.write('RESULT:' + String(result) + '\\n'); ";
@@ -333,7 +379,7 @@ console.info = (...args) => {
         {
             if (line.find("RESULT:") == 0)
             {
-
+                // Extract result
                 std::string resultStr = line.substr(7); 
                 result = Utils::Utf8ToWideString(resultStr);
 
@@ -342,7 +388,7 @@ console.info = (...args) => {
             }
             else if (!line.empty())
             {
-
+                // Collect log lines
                 if (!logLines.empty()) logLines += "\n";
                 logLines += line;
             }

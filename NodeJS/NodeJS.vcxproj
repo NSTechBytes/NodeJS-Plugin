@@ -22,6 +22,8 @@
     <ResourceCompile Include="NodeJS.rc" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CommonOptions\MeterHelper.cpp" />
+    <ClCompile Include="CommonOptions\MeterOptions.cpp" />
     <ClCompile Include="LogsFunctions\Logs.cpp" />
     <ClCompile Include="NodeJS.cpp" />
     <ClCompile Include="ParserFunctionality\ParserFunctionality.cpp" />
@@ -29,6 +31,8 @@
     <ClCompile Include="Utils\Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CommonOptions\MeterHelper.h" />
+    <ClInclude Include="CommonOptions\MeterOptions.h" />
     <ClInclude Include="LogsFunctions\Logs.h" />
     <ClInclude Include="ParserFunctionality\ParserFunctionality.h" />
     <ClInclude Include="ScriptExecutor\ScriptExecutor.h" />

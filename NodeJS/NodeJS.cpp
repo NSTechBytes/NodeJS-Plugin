@@ -11,6 +11,8 @@
 #include "Utils/Utils.h"
 #include "ScriptExecutor/ScriptExecutor.h"
 #include "ParserFunctionality/ParserFunctionality.h"
+#include "CommonOptions/MeterOptions.h"
+#include "CommonOptions/MeterHelper.h"
 
 struct Measure
 {
@@ -21,11 +23,13 @@ struct Measure
     bool nodeFound;
     bool initialized;
     bool useInlineScript;
+    void* rm;          
+    void* skin;        
     PROCESS_INFORMATION processInfo;
     HANDLE hInputWrite;
     HANDLE hOutputRead;
 
-    Measure() : nodeFound(false), initialized(false), useInlineScript(false)
+    Measure() : nodeFound(false), initialized(false), useInlineScript(false), rm(nullptr), skin(nullptr)
     {
         ZeroMemory(&processInfo, sizeof(PROCESS_INFORMATION));
         hInputWrite = NULL;
@@ -37,6 +41,9 @@ PLUGIN_EXPORT void Initialize(void** data, void* rm)
 {
     Measure* measure = new Measure;
     *data = measure;
+
+    measure->rm = rm;
+    measure->skin = RmGetSkin(rm);
 
     if (!Utils::FindNodeExecutable(measure->nodeExecutable))
     {
@@ -53,6 +60,9 @@ PLUGIN_EXPORT void Reload(void* data, void* rm, double* maxValue)
 {
     Measure* measure = static_cast<Measure*>(data);
 
+    measure->rm = rm;
+    measure->skin = RmGetSkin(rm);
+
     if (!measure->nodeFound)
     {
         return;
@@ -61,7 +71,6 @@ PLUGIN_EXPORT void Reload(void* data, void* rm, double* maxValue)
     LPCWSTR firstLine = RmReadString(rm, L"Line", L"", FALSE);
     if (wcslen(firstLine) > 0)
     {
-
         measure->useInlineScript = true;
         measure->inlineScript = firstLine;
 
@@ -77,11 +86,10 @@ PLUGIN_EXPORT void Reload(void* data, void* rm, double* maxValue)
             measure->inlineScript += lineContent;
         }
 
-        Logger::LogNotice(L"Using inline script");
+        Logger::LogNotice(L"Using inline script with meter options support");
     }
     else
     {
-
         measure->useInlineScript = false;
         LPCWSTR scriptFile = RmReadPath(rm, L"ScriptFile", L"");
         if (wcslen(scriptFile) == 0)
@@ -99,11 +107,16 @@ PLUGIN_EXPORT void Reload(void* data, void* rm, double* maxValue)
             return;
         }
 
-        Logger::LogNotice(L"Using script file: " + measure->scriptPath);
+        Logger::LogNotice(L"Using script file with meter options support: " + measure->scriptPath);
     }
 
-    std::wstring result = ScriptExecutor::ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, 
-                                                            measure->inlineScript, measure->useInlineScript, L"initialize");
+    std::wstring result = ScriptExecutor::ExecuteNodeCommand(
+        measure->nodeExecutable, 
+        measure->scriptPath, 
+        measure->inlineScript, 
+        measure->useInlineScript, 
+        L"initialize"
+    );
 
     if (!result.empty())
     {
@@ -122,8 +135,13 @@ PLUGIN_EXPORT double Update(void* data)
         return 0.0;
     }
 
-    std::wstring result = ScriptExecutor::ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, 
-                                                            measure->inlineScript, measure->useInlineScript, L"update");
+    std::wstring result = ScriptExecutor::ExecuteNodeCommand(
+        measure->nodeExecutable, 
+        measure->scriptPath, 
+        measure->inlineScript, 
+        measure->useInlineScript, 
+        L"update"
+    );
 
     if (!result.empty())
     {
@@ -133,9 +151,9 @@ PLUGIN_EXPORT double Update(void* data)
         {
             return std::stod(result);
         }
-        catch (...)
+        catch (const std::exception&)  // Removed unused variable 'e'
         {
-
+            Logger::LogDebug(L"Could not convert result to double: " + result);
             return 0.0;
         }
     }
@@ -157,8 +175,14 @@ PLUGIN_EXPORT LPCWSTR GetString(void* data)
         return measure->lastResult.c_str();
     }
 
-    std::wstring result = ScriptExecutor::ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, 
-                                                            measure->inlineScript, measure->useInlineScript, L"getString");
+    std::wstring result = ScriptExecutor::ExecuteNodeCommand(
+        measure->nodeExecutable, 
+        measure->scriptPath, 
+        measure->inlineScript, 
+        measure->useInlineScript, 
+        L"getString"
+    );
+
     measure->lastResult = result;
     return measure->lastResult.c_str();
 }
@@ -180,6 +204,15 @@ PLUGIN_EXPORT void ExecuteBang(void* data, LPCWSTR args)
         return;
     }
 
+    if (MeterHelper::IsMeterFunction(command))
+    {
+        // Execute meter function directly
+        std::wstring result = MeterHelper::ExecuteMeterFunction(measure, command);
+        measure->lastResult = result;
+        Logger::LogDebug(L"Meter function '" + command + L"' returned: " + result);
+        return;
+    }
+
     std::wstring functionCall = ParserFunctionality::ParseAndBuildFunctionCall(command);
 
     if (functionCall.empty())
@@ -190,8 +223,13 @@ PLUGIN_EXPORT void ExecuteBang(void* data, LPCWSTR args)
 
     Logger::LogDebug(L"Executing function call: " + functionCall);
 
-    std::wstring result = ScriptExecutor::ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath,
-                                                            measure->inlineScript, measure->useInlineScript, functionCall);
+    std::wstring result = ScriptExecutor::ExecuteNodeCommand(
+        measure->nodeExecutable, 
+        measure->scriptPath,
+        measure->inlineScript, 
+        measure->useInlineScript, 
+        functionCall
+    );
 
     if (!result.empty())
     {
@@ -204,11 +242,44 @@ PLUGIN_EXPORT void Finalize(void* data)
 {
     Measure* measure = static_cast<Measure*>(data);
 
+    if (!measure)
+    {
+        return;
+    }
+
     if (measure->nodeFound && measure->initialized)
     {
+        try 
+        {
+            ScriptExecutor::ExecuteNodeCommand(
+                measure->nodeExecutable, 
+                measure->scriptPath, 
+                measure->inlineScript, 
+                measure->useInlineScript, 
+                L"finalize"
+            );
+        }
+        catch (...)
+        {
+            Logger::LogWarning(L"Exception during finalization, continuing cleanup");
+        }
+    }
 
-        ScriptExecutor::ExecuteNodeCommand(measure->nodeExecutable, measure->scriptPath, 
-                                          measure->inlineScript, measure->useInlineScript, L"finalize");
+    if (measure->hInputWrite)
+    {
+        CloseHandle(measure->hInputWrite);
+    }
+    if (measure->hOutputRead)
+    {
+        CloseHandle(measure->hOutputRead);
+    }
+    if (measure->processInfo.hProcess)
+    {
+        CloseHandle(measure->processInfo.hProcess);
+    }
+    if (measure->processInfo.hThread)
+    {
+        CloseHandle(measure->processInfo.hThread);
     }
 
     delete measure;
