@@ -28,7 +28,7 @@ namespace MeterHelper
         return {
             L"MeterOption.GetX", L"MeterOption.GetY", L"MeterOption.GetW", L"MeterOption.GetH",
             L"MeterOption.SetX", L"MeterOption.SetY", L"MeterOption.SetW", L"MeterOption.SetH",
-            L"MeterOption.Show", L"MeterOption.Hide", L"MeterOption.GetProperty", L"MeterOption.SetProperty"
+            L"MeterOption.Show", L"MeterOption.Hide", L"MeterOption.SetProperty"
         };
     }
 
@@ -158,14 +158,6 @@ namespace MeterHelper
                 {
                     bool result = HideMeter(measure->skin, paramList[0]);
                     return result ? L"true" : L"false";
-                }
-            }
-            else if (funcName == L"MeterOption.GetProperty")
-            {
-                if (paramList.size() >= 2)
-                {
-                    std::wstring defVal = paramList.size() >= 3 ? paramList[2] : L"";
-                    return GetMeterProperty(measure->rm, paramList[0], paramList[1], defVal);
                 }
             }
             else if (funcName == L"MeterOption.SetProperty")

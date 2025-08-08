@@ -217,9 +217,6 @@ global.MeterOption = {
     Hide: function(meterName) {
         throw new Error('MeterOption.Hide should be called via ExecuteBang, not directly in Node.js');
     },
-    GetProperty: function(meterName, property, defValue = '') {
-        throw new Error('MeterOption.GetProperty should be called via ExecuteBang, not directly in Node.js');
-    },
     SetProperty: function(meterName, property, value) {
         throw new Error('MeterOption.SetProperty should be called via ExecuteBang, not directly in Node.js');
     }
@@ -304,7 +301,6 @@ global.MeterOption = {
         jsCode << L"SetH: function(meterName, value) { throw new Error('MeterOption.SetH should be called via ExecuteBang'); }, ";
         jsCode << L"Show: function(meterName) { throw new Error('MeterOption.Show should be called via ExecuteBang'); }, ";
         jsCode << L"Hide: function(meterName) { throw new Error('MeterOption.Hide should be called via ExecuteBang'); }, ";
-        jsCode << L"GetProperty: function(meterName, property, defValue = '') { throw new Error('MeterOption.GetProperty should be called via ExecuteBang'); }, ";
         jsCode << L"SetProperty: function(meterName, property, value) { throw new Error('MeterOption.SetProperty should be called via ExecuteBang'); } ";
         jsCode << L"}; ";
 

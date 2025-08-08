@@ -221,7 +221,7 @@ bool HideMeter(void* skin, const std::wstring& meterName)
     }
 }
 
-std::wstring GetMeterProperty(void* rm, const std::wstring& meterName, const std::wstring& property, const std::wstring& defValue)
+/*std::wstring GetMeterProperty(void* rm, const std::wstring& meterName, const std::wstring& property, const std::wstring& defValue)
 {
     if (meterName.empty() || property.empty())
     {
@@ -237,7 +237,7 @@ std::wstring GetMeterProperty(void* rm, const std::wstring& meterName, const std
     }
 
     return std::wstring(replaced);
-}
+}*/
 
 bool SetMeterProperty(void* skin, const std::wstring& meterName, const std::wstring& property, const std::wstring& value)
 {

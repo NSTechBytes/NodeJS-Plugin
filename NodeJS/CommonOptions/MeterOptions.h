@@ -18,7 +18,7 @@ bool MeterSetH(void* skin, const std::wstring& meterName, const std::wstring& va
 bool ShowMeter(void* skin, const std::wstring& meterName);
 bool HideMeter(void* skin, const std::wstring& meterName);
 
-std::wstring GetMeterProperty(void* rm, const std::wstring& meterName, const std::wstring& property, const std::wstring& defValue = L"");
+//std::wstring GetMeterProperty(void* rm, const std::wstring& meterName, const std::wstring& property, const std::wstring& defValue = L"");
 bool SetMeterProperty(void* skin, const std::wstring& meterName, const std::wstring& property, const std::wstring& value);
 
 #endif
