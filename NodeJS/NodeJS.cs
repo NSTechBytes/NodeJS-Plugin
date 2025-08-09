@@ -54,19 +54,18 @@ namespace NodeJSPlugin
                     return;
                 }
 
-                // *** MODIFIED RM CONTEXT CODE ***
-                // Added a synchronous read function and updated RM.GetVariable to perform a two-way communication.
+                // *** EXTENDED RM CONTEXT CODE ***
+                // Added new functions to the RM object to expose more of the Rainmeter API to JavaScript.
                 string rmContextCode = $@"
-  // Helper function for synchronous stdin read. This is necessary to wait for C# to send the variable value.
+  // Helper function for synchronous stdin read.
   const fs = require('fs');
   function readFromHost() {{
-    const BUFSIZE = 1024;
+    const BUFSIZE = 4096; // Increased buffer size for potentially larger values
     let buf = Buffer.alloc(BUFSIZE);
     let bytesRead = 0;
     try {{
       bytesRead = fs.readSync(process.stdin.fd, buf, 0, BUFSIZE, null);
     }} catch (e) {{
-      // Ignore errors, likely means stream ended
       return '';
     }}
     if (bytesRead === 0) {{
@@ -82,12 +81,59 @@ namespace NodeJSPlugin
       process.stdout.flush?.();
     }},
     GetVariable: function(variableName, defaultValue = '') {{
-      // 1. Tell C# we want a variable
       process.stdout.write('@@RM_GETVARIABLE ' + variableName + '|' + defaultValue + '\n');
       process.stdout.flush?.();
-      // 2. Wait for C# to write the value back to our stdin
-      const value = readFromHost();
-      return value;
+      return readFromHost();
+    }},
+    ReadString: function(option, defValue = '') {{
+        process.stdout.write('@@RM_READSTRING ' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return readFromHost();
+    }},
+    ReadStringFromSection: function(section, option, defValue = '') {{
+        process.stdout.write('@@RM_READSTRINGFROMSECTION ' + section + '|' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return readFromHost();
+    }},
+    ReadDouble: function(option, defValue = 0.0) {{
+        process.stdout.write('@@RM_READDOUBLE ' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return parseFloat(readFromHost());
+    }},
+    ReadDoubleFromSection: function(section, option, defValue = 0.0) {{
+        process.stdout.write('@@RM_READDOUBLEFROMSECTION ' + section + '|' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return parseFloat(readFromHost());
+    }},
+    ReadInt: function(option, defValue = 0) {{
+        process.stdout.write('@@RM_READINT ' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return parseInt(readFromHost(), 10);
+    }},
+    ReadIntFromSection: function(section, option, defValue = 0) {{
+        process.stdout.write('@@RM_READINTFROMSECTION ' + section + '|' + option + '|' + defValue + '\n');
+        process.stdout.flush?.();
+        return parseInt(readFromHost(), 10);
+    }},
+    GetMeasureName: function() {{
+        process.stdout.write('@@RM_GETMEASURENAME\n');
+        process.stdout.flush?.();
+        return readFromHost();
+    }},
+    GetSkinName: function() {{
+        process.stdout.write('@@RM_GETSKINNAME\n');
+        process.stdout.flush?.();
+        return readFromHost();
+    }},
+    GetSkin: function() {{
+        process.stdout.write('@@RM_GETSKIN\n');
+        process.stdout.flush?.();
+        return readFromHost();
+    }},
+    GetSkinWindow: function() {{
+        process.stdout.write('@@RM_GETSKINWINDOW\n');
+        process.stdout.flush?.();
+        return readFromHost();
     }}
   }};
   
@@ -216,9 +262,14 @@ namespace NodeJSPlugin
             }
         }
 
-        // *** MODIFIED RunNodeSynchronous METHOD ***
-        // This method now reads output line-by-line and can write back to the Node.js process,
-        // enabling two-way communication for RM.GetVariable.
+        private static void SendToNode(Process proc, string message)
+        {
+            proc.StandardInput.WriteLine(message);
+            proc.StandardInput.Flush();
+        }
+
+        // *** EXTENDED RunNodeSynchronous METHOD ***
+        // This method now handles a wide range of API calls from the Node.js script.
         private static (double?, string) RunNodeSynchronous(string mode = "init", string customCall = "")
         {
             if (string.IsNullOrWhiteSpace(_wrapperPath) || !File.Exists(_wrapperPath))
@@ -258,19 +309,17 @@ namespace NodeJSPlugin
                     return (null, "");
                 }
 
-                // Read errors asynchronously
                 var errors = new StringBuilder();
                 proc.ErrorDataReceived += (sender, args) => {
                     if (args.Data != null) errors.AppendLine(args.Data);
                 };
                 proc.BeginErrorReadLine();
 
-
                 double? numResult = null;
                 string strResult = "";
                 string resultPrefix = mode == "custom" ? "@@CUSTOM_RESULT " : (mode == "init" ? "@@INIT_RESULT " : "@@UPDATE_RESULT ");
 
-                // Process output line-by-line instead of all at once
+                var api = new API(_rmHandle);
                 string line;
                 while ((line = proc.StandardOutput.ReadLine()) != null)
                 {
@@ -280,62 +329,69 @@ namespace NodeJSPlugin
                     else if (trimmed.StartsWith("@@LOG_DEBUG ")) { API.Log(_rmHandle, API.LogType.Debug, trimmed.Substring(12)); }
                     else if (trimmed.StartsWith("@@RM_EXECUTE "))
                     {
-                        string command = trimmed.Substring(13);
-                        try
-                        {
-                            var api = new API(_rmHandle);
-                            api.Execute(command);
-                            API.Log(_rmHandle, API.LogType.Notice, $"Executed Rainmeter command: {command}");
-                        }
-                        catch (Exception ex)
-                        {
-                            API.Log(_rmHandle, API.LogType.Error, $"Error executing Rainmeter command '{command}': {ex.Message}");
-                        }
+                        api.Execute(trimmed.Substring(13));
                     }
                     else if (trimmed.StartsWith("@@RM_GETVARIABLE "))
                     {
-                        // Node is asking for a variable.
-                        string varRequest = trimmed.Substring(17);
-                        string[] parts = varRequest.Split(new[] { '|' }, 2);
-                        string varName = parts.Length > 0 ? parts[0] : "";
-                        string defaultValue = parts.Length > 1 ? parts[1] : "";
-                        string varValue = defaultValue;
-
-                        try
-                        {
-                            var api = new API(_rmHandle);
-                            string replacedValue = api.ReplaceVariables($"#{varName}#");
-                            // If the variable doesn't exist, ReplaceVariables returns the original string literal
-                            if (replacedValue != $"#{varName}#")
-                            {
-                                varValue = replacedValue;
-                            }
-                            API.Log(_rmHandle, API.LogType.Notice, $"Variable {varName} = {varValue}");
-                        }
-                        catch (Exception ex)
-                        {
-                            API.Log(_rmHandle, API.LogType.Error, $"Error getting variable '{varName}': {ex.Message}");
-                        }
-
-                        // Send the result back to the Node process via its standard input.
-                        proc.StandardInput.WriteLine(varValue);
-                        proc.StandardInput.Flush();
+                        string[] parts = trimmed.Substring(17).Split(new[] { '|' }, 2);
+                        string varValue = api.ReplaceVariables($"#{parts[0]}#");
+                        if (varValue == $"#{parts[0]}#") varValue = parts.Length > 1 ? parts[1] : "";
+                        SendToNode(proc, varValue);
+                    }
+                    else if (trimmed.StartsWith("@@RM_READSTRINGFROMSECTION "))
+                    {
+                        string[] parts = trimmed.Substring(27).Split(new[] { '|' }, 3);
+                        SendToNode(proc, api.ReadStringFromSection(parts[0], parts[1], parts[2]));
+                    }
+                    else if (trimmed.StartsWith("@@RM_READSTRING "))
+                    {
+                        string[] parts = trimmed.Substring(16).Split(new[] { '|' }, 2);
+                        SendToNode(proc, api.ReadString(parts[0], parts[1]));
+                    }
+                    else if (trimmed.StartsWith("@@RM_READDOUBLEFROMSECTION "))
+                    {
+                        string[] parts = trimmed.Substring(27).Split(new[] { '|' }, 3);
+                        SendToNode(proc, api.ReadDoubleFromSection(parts[0], parts[1], double.Parse(parts[2], CultureInfo.InvariantCulture)).ToString(CultureInfo.InvariantCulture));
+                    }
+                    else if (trimmed.StartsWith("@@RM_READDOUBLE "))
+                    {
+                        string[] parts = trimmed.Substring(16).Split(new[] { '|' }, 2);
+                        SendToNode(proc, api.ReadDouble(parts[0], double.Parse(parts[1], CultureInfo.InvariantCulture)).ToString(CultureInfo.InvariantCulture));
+                    }
+                    else if (trimmed.StartsWith("@@RM_READINTFROMSECTION "))
+                    {
+                        string[] parts = trimmed.Substring(24).Split(new[] { '|' }, 3);
+                        SendToNode(proc, api.ReadIntFromSection(parts[0], parts[1], int.Parse(parts[2])).ToString());
+                    }
+                    else if (trimmed.StartsWith("@@RM_READINT "))
+                    {
+                        string[] parts = trimmed.Substring(13).Split(new[] { '|' }, 2);
+                        SendToNode(proc, api.ReadInt(parts[0], int.Parse(parts[1])).ToString());
+                    }
+                    else if (trimmed.StartsWith("@@RM_GETMEASURENAME"))
+                    {
+                        SendToNode(proc, api.GetMeasureName());
+                    }
+                    else if (trimmed.StartsWith("@@RM_GETSKINNAME"))
+                    {
+                        SendToNode(proc, api.GetSkinName());
+                    }
+                    else if (trimmed.StartsWith("@@RM_GETSKIN"))
+                    {
+                        SendToNode(proc, api.GetSkin().ToString());
+                    }
+                    else if (trimmed.StartsWith("@@RM_GETSKINWINDOW"))
+                    {
+                        SendToNode(proc, api.GetSkinWindow().ToString());
                     }
                     else if (trimmed.StartsWith(resultPrefix))
                     {
                         string payload = trimmed.Substring(resultPrefix.Length);
                         strResult = payload;
 
-                        if (!string.IsNullOrEmpty(payload))
+                        if (!string.IsNullOrEmpty(payload) && double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
                         {
-                            if (double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
-                            {
-                                numResult = v;
-                            }
-                            else
-                            {
-                                API.Log(_rmHandle, API.LogType.Notice, $"'{mode}' result (non-numeric): {payload}");
-                            }
+                            numResult = v;
                         }
                     }
                     else { API.Log(_rmHandle, API.LogType.Notice, line); }
@@ -348,9 +404,7 @@ namespace NodeJSPlugin
                 {
                     foreach (string errorLine in allErrors.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                     {
-                        string trimmed = errorLine.Trim();
-                        if (trimmed.StartsWith("@@LOG_ERROR ")) API.Log(_rmHandle, API.LogType.Error, trimmed.Substring(12));
-                        else API.Log(_rmHandle, API.LogType.Error, trimmed);
+                        API.Log(_rmHandle, API.LogType.Error, errorLine.StartsWith("@@LOG_ERROR ") ? errorLine.Substring(12) : errorLine);
                     }
                 }
 
@@ -370,9 +424,6 @@ namespace NodeJSPlugin
 
         private static void RunNodeAsync()
         {
-            // Note: Asynchronous mode does not support GetVariable.
-            // This would require a much more complex implementation.
-            // For now, only synchronous calls (Initialize, Bangs) support GetVariable.
             string currentWrapperPath = _wrapperPath;
             string currentScriptFile = _scriptFile;
             IntPtr currentRmHandle = _rmHandle;
@@ -385,7 +436,6 @@ namespace NodeJSPlugin
                 string tempExecutionPath = "";
                 try
                 {
-
                     lock (_stateLock)
                     {
                         if (string.IsNullOrWhiteSpace(currentWrapperPath) || !File.Exists(currentWrapperPath)) return;
@@ -427,22 +477,11 @@ namespace NodeJSPlugin
                             else if (line.StartsWith("@@LOG_ERROR ")) { API.Log(currentRmHandle, API.LogType.Error, line.Substring(12)); }
                             else if (line.StartsWith("@@RM_EXECUTE "))
                             {
-                                string command = line.Substring(13);
-                                try
-                                {
-                                    var api = new API(currentRmHandle);
-                                    api.Execute(command);
-                                    API.Log(currentRmHandle, API.LogType.Notice, $"Executed Rainmeter command: {command}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    API.Log(currentRmHandle, API.LogType.Error, $"Error executing Rainmeter command '{command}': {ex.Message}");
-                                }
+                                new API(currentRmHandle).Execute(line.Substring(13));
                             }
-                            else if (line.StartsWith("@@RM_GETVARIABLE "))
+                            else if (line.StartsWith("@@RM_"))
                             {
-                                // This case is intentionally not handled in async mode as it would be very complex.
-                                API.Log(currentRmHandle, API.LogType.Warning, "RM.GetVariable is not supported in asynchronous 'update' calls. Use bangs or initialize for this functionality.");
+                                API.Log(currentRmHandle, API.LogType.Warning, "RM API calls are not supported in asynchronous 'update' calls. Use bangs or initialize for this functionality.");
                             }
                             else if (line.StartsWith("@@UPDATE_RESULT "))
                             {
@@ -452,16 +491,9 @@ namespace NodeJSPlugin
                                     _lastStringValue = payload;
                                     _hasStringValue = !string.IsNullOrEmpty(payload);
 
-                                    if (!string.IsNullOrEmpty(payload))
+                                    if (!string.IsNullOrEmpty(payload) && double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
                                     {
-                                        if (double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
-                                        {
-                                            _lastValue = v;
-                                        }
-                                        else
-                                        {
-                                            API.Log(currentRmHandle, API.LogType.Notice, $"'update' result (non-numeric): {payload}");
-                                        }
+                                        _lastValue = v;
                                     }
                                 }
                             }
@@ -472,10 +504,10 @@ namespace NodeJSPlugin
 
                     proc.ErrorDataReceived += (s, e) =>
                     {
-                        if (string.IsNullOrWhiteSpace(e.Data)) return;
-                        string line = e.Data.Trim();
-                        if (line.StartsWith("@@LOG_ERROR ")) API.Log(currentRmHandle, API.LogType.Error, line.Substring(12));
-                        else API.Log(currentRmHandle, API.LogType.Error, line);
+                        if (!string.IsNullOrWhiteSpace(e.Data))
+                        {
+                            API.Log(currentRmHandle, API.LogType.Error, e.Data.Trim().StartsWith("@@LOG_ERROR ") ? e.Data.Trim().Substring(12) : e.Data.Trim());
+                        }
                     };
 
                     proc.BeginOutputReadLine();
@@ -510,7 +542,6 @@ namespace NodeJSPlugin
             var scriptLines = new List<string>();
             int lineIndex = 1;
 
-            // Check for Line parameter first
             string firstLine = api.ReadString("Line", "");
             if (!string.IsNullOrEmpty(firstLine))
             {
@@ -518,7 +549,6 @@ namespace NodeJSPlugin
                 lineIndex = 2;
             }
 
-            // Then check for Line2, Line3, etc.
             while (true)
             {
                 string line = api.ReadString($"Line{lineIndex}", "");
@@ -566,7 +596,6 @@ namespace NodeJSPlugin
         {
             lock (_stateLock)
             {
-
                 _forceReload = true;
 
                 try
@@ -575,11 +604,7 @@ namespace NodeJSPlugin
                     _cancellationTokenSource?.Dispose();
                     _cancellationTokenSource = null;
                 }
-                catch (Exception ex)
-                {
-                    if (_rmHandle != IntPtr.Zero)
-                        API.Log(_rmHandle, API.LogType.Warning, "Error canceling tasks: " + ex.Message);
-                }
+                catch { }
 
                 try
                 {
@@ -588,11 +613,7 @@ namespace NodeJSPlugin
                         File.Delete(_wrapperPath);
                     }
                 }
-                catch (Exception ex)
-                {
-                    if (_rmHandle != IntPtr.Zero)
-                        API.Log(_rmHandle, API.LogType.Warning, "Error deleting wrapper file: " + ex.Message);
-                }
+                catch { }
 
                 _scriptFile = "";
                 _inlineScript = "";
@@ -621,7 +642,6 @@ namespace NodeJSPlugin
 
             lock (_stateLock)
             {
-                // Check if anything has changed
                 if (_pluginState == PluginState.Initialized &&
                     newScriptFile == _scriptFile &&
                     newInlineScript == _inlineScript &&
@@ -630,12 +650,9 @@ namespace NodeJSPlugin
                     return;
                 }
 
-                if (_forceReload)
-                {
-                    _forceReload = false;
-                    API.Log(_rmHandle, API.LogType.Notice, "Forced reload: Cleaning up previous state...");
-                }
-                else if (newScriptFile != _scriptFile || newInlineScript != _inlineScript)
+                _forceReload = false;
+
+                if (newScriptFile != _scriptFile || newInlineScript != _inlineScript)
                 {
                     API.Log(_rmHandle, API.LogType.Notice, "Script changed: Cleaning up previous state...");
                 }
@@ -669,7 +686,6 @@ namespace NodeJSPlugin
                 _cancellationTokenSource = new CancellationTokenSource();
             }
 
-            // Validate that we have either a script file or inline script
             if (string.IsNullOrWhiteSpace(_scriptFile) && string.IsNullOrWhiteSpace(_inlineScript))
             {
                 API.Log(_rmHandle, API.LogType.Error, "Neither ScriptFile nor Line parameters are set for NodeJS measure.");
@@ -677,7 +693,6 @@ namespace NodeJSPlugin
                 return;
             }
 
-            // Log what type of script we're using
             if (!string.IsNullOrWhiteSpace(_inlineScript))
             {
                 API.Log(_rmHandle, API.LogType.Notice, "Using inline script with " + _inlineScript.Split('\n').Length + " lines.");
@@ -705,15 +720,6 @@ namespace NodeJSPlugin
 
                 _pluginState = PluginState.Initialized;
                 API.Log(_rmHandle, API.LogType.Notice, $"NodeJS script initialized successfully.");
-
-                if (initialValue.HasValue)
-                {
-                    API.Log(_rmHandle, API.LogType.Notice, $"Initial numeric value: {_lastValue}");
-                }
-                if (_hasStringValue)
-                {
-                    API.Log(_rmHandle, API.LogType.Notice, $"Initial string value: {_lastStringValue}");
-                }
             }
         }
 
@@ -735,11 +741,7 @@ namespace NodeJSPlugin
         [DllExport]
         public static void ExecuteBang(IntPtr data, [MarshalAs(UnmanagedType.LPWStr)] string args)
         {
-            if (string.IsNullOrWhiteSpace(args))
-            {
-                API.Log(_rmHandle, API.LogType.Warning, "ExecuteBang called with empty arguments.");
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(args)) return;
 
             if (_pluginState != PluginState.Initialized)
             {
@@ -756,16 +758,9 @@ namespace NodeJSPlugin
                     if (resultValue.HasValue)
                     {
                         _lastValue = resultValue.Value;
-                        API.Log(_rmHandle, API.LogType.Notice, $"Custom function result (numeric): {_lastValue}");
                     }
-
                     _lastStringValue = resultString ?? "";
                     _hasStringValue = !string.IsNullOrEmpty(_lastStringValue);
-
-                    if (_hasStringValue)
-                    {
-                        API.Log(_rmHandle, API.LogType.Notice, $"Custom function result (string): {_lastStringValue}");
-                    }
                 }
             }
             catch (Exception ex)
@@ -774,9 +769,6 @@ namespace NodeJSPlugin
             }
         }
 
-        // *** NEW METHOD ***
-        // This method allows calling a JS function directly from a measure and getting its string return value.
-        // Usage in Rainmeter: [&MeasureName:Call("MyFunction(arg1, 'arg2')")]
         [DllExport]
         public static IntPtr Call(IntPtr data, int argc, [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr, SizeParamIndex = 1)] string[] argv)
         {
@@ -799,7 +791,6 @@ namespace NodeJSPlugin
 
                 if (resultString != null)
                 {
-                    // Rainmeter is responsible for freeing this memory.
                     return Marshal.StringToHGlobalUni(resultString);
                 }
             }
