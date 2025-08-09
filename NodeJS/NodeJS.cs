@@ -59,29 +59,41 @@ namespace NodeJSPlugin
             string newScriptFile = api.ReadPath("ScriptFile", "").Trim();
             string newInlineScript = BuildInlineScript(api);
 
+            // Check if configuration has actually changed
+            bool configurationChanged = newScriptFile != _scriptFile || newInlineScript != _inlineScript;
+            bool needsNewWrapper = false;
+
             lock (_stateLock)
             {
-                // Skip reload if nothing changed
-                if (_pluginState == PluginState.Initialized &&
-                    newScriptFile == _scriptFile &&
-                    newInlineScript == _inlineScript &&
-                    !_forceReload)
+                // Skip reload if nothing changed and plugin is already initialized
+                if (_pluginState == PluginState.Initialized && !configurationChanged && !_forceReload)
                 {
-                    return;
+                    return; // No changes detected, keep existing wrapper
                 }
 
                 _forceReload = false;
 
-                // Clean up previous state if needed
-                if (_pluginState == PluginState.Initialized || _pluginState == PluginState.Initializing)
+                // Only clean up if configuration changed or forced reload
+                if (configurationChanged || _forceReload)
                 {
-                    CleanupResources();
+                    // Clean up previous state if needed
+                    if (_pluginState == PluginState.Initialized || _pluginState == PluginState.Initializing)
+                    {
+                        CleanupResources();
+                    }
+
+                    _pluginState = PluginState.Initializing;
+                    _scriptFile = newScriptFile;
+                    _inlineScript = newInlineScript;
+
+                    // Cancel previous operations and create new token source
+                    _cancellationTokenSource?.Cancel();
+                    _cancellationTokenSource?.Dispose();
+                    _cancellationTokenSource = new CancellationTokenSource();
                 }
 
-                _pluginState = PluginState.Initializing;
-                _scriptFile = newScriptFile;
-                _inlineScript = newInlineScript;
-                _cancellationTokenSource = new CancellationTokenSource();
+                // Determine if we need a new wrapper
+                needsNewWrapper = string.IsNullOrEmpty(_wrapperPath) || !File.Exists(_wrapperPath) || configurationChanged;
             }
 
             // Validate script configuration
@@ -94,7 +106,12 @@ namespace NodeJSPlugin
 
             try
             {
-                Wrapper.CreateWrapper();
+                // Only create wrapper if we don't have one or configuration changed
+                if (needsNewWrapper)
+                {
+                    Wrapper.CreateWrapper();
+                }
+
                 var (initialValue, initialStringValue) = NodeProcess.RunNodeSynchronous("init");
 
                 lock (_stateLock)
@@ -204,7 +221,17 @@ namespace NodeJSPlugin
         {
             lock (_stateLock)
             {
+                _pluginState = PluginState.Uninitialized;
                 _forceReload = true;
+
+                // Cancel all running operations first
+                try
+                {
+                    _cancellationTokenSource?.Cancel();
+                    Thread.Sleep(100); // Give async operations time to cancel
+                }
+                catch { }
+
                 CleanupResources();
                 ResetState();
             }
@@ -212,6 +239,10 @@ namespace NodeJSPlugin
 
         private static void CleanupResources()
         {
+            // First cleanup async Node processes
+            NodeProcess.CleanupAsyncOperations();
+
+            // Cancel and dispose cancellation token source
             try
             {
                 _cancellationTokenSource?.Cancel();
@@ -220,10 +251,14 @@ namespace NodeJSPlugin
             }
             catch { }
 
+            // Clean up wrapper file
             try
             {
                 if (!string.IsNullOrEmpty(_wrapperPath) && File.Exists(_wrapperPath))
+                {
                     File.Delete(_wrapperPath);
+                    _wrapperPath = "";
+                }
             }
             catch { }
         }

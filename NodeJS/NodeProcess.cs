@@ -11,6 +11,11 @@ namespace NodeJSPlugin
 {
     internal static class NodeProcess
     {
+        private static volatile bool _asyncRunning = false;
+        private static readonly object _asyncLock = new object();
+        private static CancellationTokenSource _asyncCancellationTokenSource;
+        private static Process _currentAsyncProcess = null;
+
         private static readonly ProcessStartInfo DefaultProcessStartInfo = new ProcessStartInfo
         {
             FileName = "node",
@@ -22,6 +27,38 @@ namespace NodeJSPlugin
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
+
+        internal static void CleanupAsyncOperations()
+        {
+            lock (_asyncLock)
+            {
+                try
+                {
+                    _asyncCancellationTokenSource?.Cancel();
+
+                    // Kill any running async process
+                    if (_currentAsyncProcess != null && !_currentAsyncProcess.HasExited)
+                    {
+                        try
+                        {
+                            _currentAsyncProcess.Kill();
+                            _currentAsyncProcess.WaitForExit(1000); // Wait up to 1 second
+                        }
+                        catch { }
+                        finally
+                        {
+                            _currentAsyncProcess?.Dispose();
+                            _currentAsyncProcess = null;
+                        }
+                    }
+
+                    _asyncCancellationTokenSource?.Dispose();
+                    _asyncCancellationTokenSource = null;
+                    _asyncRunning = false;
+                }
+                catch { }
+            }
+        }
 
         internal static (double?, string) RunNodeSynchronous(string mode = "init", string customCall = "")
         {
@@ -69,25 +106,47 @@ namespace NodeJSPlugin
 
         internal static void RunNodeAsync()
         {
+            // Prevent multiple async executions from running simultaneously
+            lock (_asyncLock)
+            {
+                if (_asyncRunning)
+                {
+                    return; // Skip this update if async is already running
+                }
+                _asyncRunning = true;
+            }
+
             string currentWrapperPath = Plugin._wrapperPath;
             string currentScriptFile = Plugin._scriptFile;
             IntPtr currentRmHandle = Plugin._rmHandle;
-            CancellationToken token = Plugin._cancellationTokenSource.Token;
 
-            Task.Run(() =>
+            // Cancel any previous async operation
+            _asyncCancellationTokenSource?.Cancel();
+            _asyncCancellationTokenSource?.Dispose();
+            _asyncCancellationTokenSource = new CancellationTokenSource();
+            CancellationToken token = _asyncCancellationTokenSource.Token;
+
+            Task.Run(async () =>
             {
-                if (token.IsCancellationRequested || !ValidateWrapper()) return;
-
-                string tempExecutionPath = "";
                 try
                 {
-                    tempExecutionPath = CreateTempWrapper(currentWrapperPath);
-                    if (string.IsNullOrEmpty(tempExecutionPath)) return;
+                    if (token.IsCancellationRequested || !ValidateWrapper())
+                        return;
+
+                    string tempExecutionPath = CreateTempWrapper(currentWrapperPath);
+                    if (string.IsNullOrEmpty(tempExecutionPath))
+                        return;
 
                     token.ThrowIfCancellationRequested();
-                    ExecuteAsyncNodeProcess(tempExecutionPath, currentScriptFile, currentRmHandle, token);
+                    await ExecuteAsyncNodeProcessAsync(tempExecutionPath, currentScriptFile, currentRmHandle, token);
+
+                    // Clean up temp file
+                    CleanupTempFile(tempExecutionPath);
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException)
+                {
+                    // Expected when cancellation is requested
+                }
                 catch (Exception ex)
                 {
                     if (!token.IsCancellationRequested)
@@ -95,7 +154,22 @@ namespace NodeJSPlugin
                 }
                 finally
                 {
-                    CleanupTempFile(tempExecutionPath);
+                    lock (_asyncLock)
+                    {
+                        _asyncRunning = false;
+                        if (_currentAsyncProcess != null)
+                        {
+                            try
+                            {
+                                _currentAsyncProcess.Dispose();
+                            }
+                            catch { }
+                            finally
+                            {
+                                _currentAsyncProcess = null;
+                            }
+                        }
+                    }
                 }
             }, token);
         }
@@ -373,7 +447,7 @@ namespace NodeJSPlugin
             }
         }
 
-        private static void ExecuteAsyncNodeProcess(string tempPath, string scriptFile, IntPtr rmHandle, CancellationToken token)
+        private static async Task ExecuteAsyncNodeProcessAsync(string tempPath, string scriptFile, IntPtr rmHandle, CancellationToken token)
         {
             var psi = new ProcessStartInfo
             {
@@ -388,20 +462,77 @@ namespace NodeJSPlugin
                     Environment.CurrentDirectory
             };
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
+            Process proc = null;
+            try
             {
-                API.Log(rmHandle, API.LogType.Error, "Failed to start async Node.js process.");
-                return;
+                proc = Process.Start(psi);
+                if (proc == null)
+                {
+                    API.Log(rmHandle, API.LogType.Error, "Failed to start async Node.js process.");
+                    return;
+                }
+
+                // Store reference for cleanup
+                lock (_asyncLock)
+                {
+                    _currentAsyncProcess = proc;
+                }
+
+                SetupAsyncEventHandlers(proc, rmHandle);
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                // Wait for process to complete with cancellation support
+                while (!proc.HasExited && !token.IsCancellationRequested)
+                {
+                    await Task.Delay(50, token);
+                }
+
+                if (!proc.HasExited && !token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        proc.Kill();
+                        await Task.Delay(100, CancellationToken.None); // Brief wait for cleanup
+                    }
+                    catch { }
+                }
+
+                if (proc.ExitCode != 0 && !token.IsCancellationRequested)
+                    API.Log(rmHandle, API.LogType.Error, $"Async Node.js process exited with code {proc.ExitCode}.");
             }
+            catch (OperationCanceledException)
+            {
+                // Handle cancellation
+                if (proc != null && !proc.HasExited)
+                {
+                    try
+                    {
+                        proc.Kill();
+                        proc.WaitForExit(1000);
+                    }
+                    catch { }
+                }
+                throw; // Re-throw to be handled by caller
+            }
+            catch (Exception ex)
+            {
+                API.Log(rmHandle, API.LogType.Error, $"Async process execution failed: {GetSimpleErrorMessage(ex)}");
+            }
+            finally
+            {
+                try
+                {
+                    proc?.Dispose();
+                }
+                catch { }
 
-            SetupAsyncEventHandlers(proc, rmHandle);
-            proc.BeginOutputReadLine();
-            proc.BeginErrorReadLine();
-            proc.WaitForExit();
-
-            if (proc.ExitCode != 0)
-                API.Log(rmHandle, API.LogType.Error, $"Async Node.js process exited with code {proc.ExitCode}.");
+                lock (_asyncLock)
+                {
+                    if (_currentAsyncProcess == proc)
+                        _currentAsyncProcess = null;
+                }
+            }
         }
 
         private static void SetupAsyncEventHandlers(Process proc, IntPtr rmHandle)
