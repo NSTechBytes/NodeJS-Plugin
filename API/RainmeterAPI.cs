@@ -31,7 +31,13 @@ namespace Rainmeter
         private extern static IntPtr RmReadString(IntPtr rm, string option, string defValue, bool replaceMeasures);
 
         [DllImport("Rainmeter.dll", CharSet = CharSet.Unicode)]
+        private extern static IntPtr RmReadStringFromSection(IntPtr rm, string section, string option, string defValue, bool replaceMeasures);
+
+        [DllImport("Rainmeter.dll", CharSet = CharSet.Unicode)]
         private extern static double RmReadFormula(IntPtr rm, string option, double defValue);
+
+        [DllImport("Rainmeter.dll", CharSet = CharSet.Unicode)]
+        private extern static double RmReadFormulaFromSection(IntPtr rm, string section, string option, double defValue);
 
         [DllImport("Rainmeter.dll", CharSet = CharSet.Unicode)]
         private extern static IntPtr RmReplaceVariables(IntPtr rm, string str);
@@ -86,9 +92,9 @@ namespace Rainmeter
         }
 
         /// <summary>
-        /// Retrieves the option defined in the skin file
+        /// Retrieves an option of the plugin script measure
         /// </summary>
-        /// <param name="option">Option name to be read from skin</param>
+        /// <param name="option">Option name</param>
         /// <param name="defValue">Default value for the option if it is not found or invalid</param>
         /// <param name="replaceMeasures">If true, replaces section variables in the returned string</param>
         /// <returns>Returns the option value as a string</returns>
@@ -100,13 +106,44 @@ namespace Rainmeter
         ///     Measure measure = (Measure)data;
         ///     Rainmeter.API api = (Rainmeter.API)rm;
         ///     string value = api.ReadString("Value", "DefaultValue");
-        ///     string action = api.ReadString("Action", "", false);  // [MeasureNames] will be parsed/replaced when the action is executed with RmExecute
         /// }
         /// </code>
         /// </example>
         public string ReadString(string option, string defValue, bool replaceMeasures = true)
         {
             return Marshal.PtrToStringUni(RmReadString(m_Rm, option, defValue, replaceMeasures));
+        }
+
+        /// <summary>
+        /// Retrieves an option of a meter/measure
+        /// </summary>
+        /// <remarks>In older Rainmeter versions without support for this API, always returns the default value</remarks>
+        /// <param name="section">Meter/measure section name</param>
+        /// <param name="option">Option name</param>
+        /// <param name="defValue">Default value for the option if it is not found or invalid</param>
+        /// <param name="replaceMeasures">If true, replaces section variables in the returned string</param>
+        /// <returns>Returns the option value as a string</returns>
+        /// <example>
+        /// <code>
+        /// [DllExport]
+        /// public static void Reload(IntPtr data, IntPtr rm, ref double maxValue)
+        /// {
+        ///     Measure measure = (Measure)data;
+        ///     Rainmeter.API api = (Rainmeter.API)rm;
+        ///     string value = api.ReadString("MySection", "Value", "DefaultValue");
+        /// }
+        /// </code>
+        /// </example>
+        public string ReadStringFromSection(string section, string option, string defValue, bool replaceMeasures = true)
+        {
+            try
+            {
+                return Marshal.PtrToStringUni(RmReadStringFromSection(m_Rm, section, option, defValue, replaceMeasures));
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return defValue;
+            }
         }
 
         /// <summary>
@@ -155,6 +192,37 @@ namespace Rainmeter
         }
 
         /// <summary>
+        /// Retrieves the option defined in a section and converts it to a double
+        /// </summary>
+        /// <remarks>In older Rainmeter versions without support for this API, always returns the default value</remarks>
+        /// <param name="section">Meter/measure section name</param>
+        /// <param name="option">Option name</param>
+        /// <param name="defValue">Default value for the option if it is not found or invalid</param>
+        /// <returns>Returns the option value as a double</returns>
+        /// <example>
+        /// <code>
+        /// [DllExport]
+        /// public static void Reload(IntPtr data, IntPtr rm, ref double maxValue)
+        /// {
+        ///     Measure measure = (Measure)data;
+        ///     Rainmeter.API api = (Rainmeter.API)rm;
+        ///     double value = api.ReadDoubleFromSection("Section", "Option", 20.0);
+        /// }
+        /// </code>
+        /// </example>
+        public double ReadDoubleFromSection(string section, string option, double defValue)
+        {
+            try
+            {
+                return RmReadFormulaFromSection(m_Rm, section, option, defValue);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return defValue;
+            }
+        }
+
+        /// <summary>
         /// Retrieves the option defined in the skin file and converts it to an integer
         /// </summary>
         /// <remarks>If the option is a formula, the returned value will be the result of the parsed formula</remarks>
@@ -175,6 +243,37 @@ namespace Rainmeter
         public int ReadInt(string option, int defValue)
         {
             return (int)RmReadFormula(m_Rm, option, defValue);
+        }
+
+        /// <summary>
+        /// Retrieves the option defined in a section and converts it to an integer
+        /// </summary>
+        /// <remarks>In older Rainmeter versions without support for this API, always returns the default value</remarks>
+        /// <param name="section">Meter/measure section name</param>
+        /// <param name="option">Option name</param>
+        /// <param name="defValue">Default value for the option if it is not found or invalid</param>
+        /// <returns>Returns the option value as an integer</returns>
+        /// <example>
+        /// <code>
+        /// [DllExport]
+        /// public static void Reload(IntPtr data, IntPtr rm, ref double maxValue)
+        /// {
+        ///     Measure measure = (Measure)data;
+        ///     Rainmeter.API api = (Rainmeter.API)rm;
+        ///     int value = api.ReadIntFromSection("Section", "Option", 20);
+        /// }
+        /// </code>
+        /// </example>
+        public int ReadIntFromSection(string section, string option, int defValue)
+        {
+            try
+            {
+                return (int)RmReadFormulaFromSection(m_Rm, section, option, defValue);
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return defValue;
+            }
         }
 
         /// <summary>
@@ -406,10 +505,6 @@ namespace Rainmeter
             RmLog(this.m_Rm, type, message);
         }
 
-
-
-
-
         /// <summary>
         /// Sends a formatted message to the Rainmeter log
         /// </summary>
@@ -436,6 +531,60 @@ namespace Rainmeter
             RmLog(this.m_Rm, type, string.Format(format, args));
         }
     }
+
+    /// <summary>
+    /// Helper for returning strings back to Rainmeter as an IntPtr.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// [DllExport]
+    /// public static IntPtr GetString(IntPtr data)
+    /// {
+    ///     return Rainmeter.StringBuffer.Update("hello");
+    /// }
+    /// </code>
+    /// </example>
+    public sealed class StringBuffer
+    {
+        private static readonly StringBuffer s_Instance = new StringBuffer();
+
+        private IntPtr m_Buffer = IntPtr.Zero;
+
+        static StringBuffer()
+        {
+        }
+
+        private StringBuffer()
+        {
+        }
+
+        ~StringBuffer()
+        {
+            FreeBuffer();
+        }
+
+        private void FreeBuffer()
+        {
+            if (m_Buffer != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(m_Buffer);
+                m_Buffer = IntPtr.Zero;
+            }
+        }
+
+        public static IntPtr Update(string value)
+        {
+            s_Instance.FreeBuffer();
+            s_Instance.m_Buffer = value != null ? Marshal.StringToHGlobalUni(value) : IntPtr.Zero;
+            return s_Instance.m_Buffer;
+        }
+
+        public static IntPtr Get()
+        {
+            return s_Instance.m_Buffer;
+        }
+    }
+
     /// <summary>
     /// Dummy attribute to mark method as exported for DllExporter.exe.
     /// </summary>

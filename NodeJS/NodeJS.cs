@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -16,6 +17,7 @@ namespace NodeJSPlugin
         private enum PluginState { Uninitialized, Initializing, Initialized }
 
         private static string _scriptFile = "";
+        private static string _inlineScript = "";
         private static string _wrapperPath = "";
         private static IntPtr _rmHandle = IntPtr.Zero;
         private static double _lastValue = 0.0;
@@ -25,28 +27,125 @@ namespace NodeJSPlugin
         private static CancellationTokenSource _cancellationTokenSource;
 
         private static volatile PluginState _pluginState = PluginState.Uninitialized;
-        private static readonly object _stateLock = new object(); 
+        private static readonly object _stateLock = new object();
 
         private static void CreateWrapper()
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(_scriptFile)) return;
+                string scriptContent = "";
+                bool isInlineScript = false;
 
-                string scriptFull = Path.GetFullPath(_scriptFile);
-                string escapedScriptPath = scriptFull.Replace("\\", "\\\\").Replace("'", "\\'");
+                // Check if we have inline script or file script
+                if (!string.IsNullOrWhiteSpace(_inlineScript))
+                {
+                    scriptContent = _inlineScript;
+                    isInlineScript = true;
+                }
+                else if (!string.IsNullOrWhiteSpace(_scriptFile))
+                {
+                    string scriptFull = Path.GetFullPath(_scriptFile);
+                    string escapedScriptPath = scriptFull.Replace("\\", "\\\\").Replace("'", "\\'");
+                    scriptContent = $"require('{escapedScriptPath}')";
+                    isInlineScript = false;
+                }
+                else
+                {
+                    return;
+                }
+
+                // *** MODIFIED RM CONTEXT CODE ***
+                // Added a synchronous read function and updated RM.GetVariable to perform a two-way communication.
+                string rmContextCode = $@"
+  // Helper function for synchronous stdin read. This is necessary to wait for C# to send the variable value.
+  const fs = require('fs');
+  function readFromHost() {{
+    const BUFSIZE = 1024;
+    let buf = Buffer.alloc(BUFSIZE);
+    let bytesRead = 0;
+    try {{
+      bytesRead = fs.readSync(process.stdin.fd, buf, 0, BUFSIZE, null);
+    }} catch (e) {{
+      // Ignore errors, likely means stream ended
+      return '';
+    }}
+    if (bytesRead === 0) {{
+      return '';
+    }}
+    return buf.toString('utf8', 0, bytesRead).trim();
+  }}
+
+  // RM object for Rainmeter integration
+  global.RM = {{
+    Execute: function(command) {{
+      process.stdout.write('@@RM_EXECUTE ' + command + '\n');
+      process.stdout.flush?.();
+    }},
+    GetVariable: function(variableName, defaultValue = '') {{
+      // 1. Tell C# we want a variable
+      process.stdout.write('@@RM_GETVARIABLE ' + variableName + '|' + defaultValue + '\n');
+      process.stdout.flush?.();
+      // 2. Wait for C# to write the value back to our stdin
+      const value = readFromHost();
+      return value;
+    }}
+  }};
+  
+  // Also make RM available as a local variable
+  const RM = global.RM;
+";
+
+                string scriptModuleCode = isInlineScript ?
+                    $@"
+  // Inline script execution
+  let scriptModule = null;
+  try {{
+    // Create a module-like object for inline scripts
+    scriptModule = {{}};
+    
+    // Execute the inline script in a context where it can define functions
+    const scriptFunction = new Function('module', 'exports', 'RM', `
+      {scriptContent}
+      
+      // Export functions that might have been defined
+      if (typeof initialize !== 'undefined') module.exports.initialize = initialize;
+      if (typeof update !== 'undefined') module.exports.update = update;
+      
+      // Export any other functions defined in global scope
+      for (let key in this) {{
+        if (typeof this[key] === 'function' && key !== 'initialize' && key !== 'update') {{
+          module.exports[key] = this[key];
+        }}
+      }}
+    `);
+    
+    const moduleObj = {{ exports: {{}} }};
+    scriptFunction.call({{}}, moduleObj, moduleObj.exports, RM);
+    scriptModule = moduleObj.exports;
+  }} catch (e) {{
+    process.stderr.write('@@LOG_ERROR Inline script compilation error: ' + (e && e.stack ? e.stack : e) + '\n');
+    scriptModule = {{}};
+  }}" :
+                    $@"
+  // File-based script loading
+  let scriptModule = null;
+  try {{
+    scriptModule = {scriptContent};
+  }} catch (e) {{
+    process.stderr.write('@@LOG_ERROR Script loading error: ' + (e && e.stack ? e.stack : e) + '\n');
+    scriptModule = {{}};
+  }}";
 
                 string wrapper = $@"
 (function(){{
-  console.log = (...args) => {{ process.stdout.write('@@LOG_NOTICE ' + args.join(' ') + '\n'); }};
-  console.warn = (...args) => {{ process.stdout.write('@@LOG_WARNING ' + args.join(' ') + '\n'); }};
-  console.debug = (...args) => {{ process.stdout.write('@@LOG_DEBUG ' + args.join(' ') + '\n'); }};
-  console.error = (...args) => {{ process.stderr.write('@@LOG_ERROR ' + args.join(' ') + '\n'); }};
+  console.log = (...args) => {{ process.stdout.write('@@LOG_NOTICE ' + args.join(' ') + '\n'); process.stdout.flush?.(); }};
+  console.warn = (...args) => {{ process.stdout.write('@@LOG_WARNING ' + args.join(' ') + '\n'); process.stdout.flush?.(); }};
+  console.debug = (...args) => {{ process.stdout.write('@@LOG_DEBUG ' + args.join(' ') + '\n'); process.stdout.flush?.(); }};
+  console.error = (...args) => {{ process.stderr.write('@@LOG_ERROR ' + args.join(' ') + '\n'); process.stderr.flush?.(); }};
 
-  let scriptModule = null;
+{rmContextCode}
 
-  try {{
-    scriptModule = require('{escapedScriptPath}');
+{scriptModuleCode}
 
     async function runInit() {{
       try {{
@@ -99,9 +198,6 @@ namespace NodeJSPlugin
     }} else {{
       runUpdate();
     }}
-  }} catch (e) {{
-    process.stderr.write('@@LOG_ERROR Script loading error: ' + (e && e.stack ? e.stack : e) + '\n');
-  }}
 }})();
 ";
 
@@ -120,6 +216,9 @@ namespace NodeJSPlugin
             }
         }
 
+        // *** MODIFIED RunNodeSynchronous METHOD ***
+        // This method now reads output line-by-line and can write back to the Node.js process,
+        // enabling two-way communication for RM.GetVariable.
         private static (double?, string) RunNodeSynchronous(string mode = "init", string customCall = "")
         {
             if (string.IsNullOrWhiteSpace(_wrapperPath) || !File.Exists(_wrapperPath))
@@ -142,9 +241,12 @@ namespace NodeJSPlugin
                     Arguments = arguments,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    RedirectStandardInput = true, // <-- Required to send data back to Node
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(_scriptFile)) ?? Environment.CurrentDirectory,
+                    WorkingDirectory = !string.IsNullOrEmpty(_scriptFile) ?
+                        (Path.GetDirectoryName(Path.GetFullPath(_scriptFile)) ?? Environment.CurrentDirectory) :
+                        Environment.CurrentDirectory,
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8
                 };
@@ -156,40 +258,73 @@ namespace NodeJSPlugin
                     return (null, "");
                 }
 
-                string output = proc.StandardOutput.ReadToEnd();
-                string errors = proc.StandardError.ReadToEnd();
-                proc.WaitForExit();
+                // Read errors asynchronously
+                var errors = new StringBuilder();
+                proc.ErrorDataReceived += (sender, args) => {
+                    if (args.Data != null) errors.AppendLine(args.Data);
+                };
+                proc.BeginErrorReadLine();
 
-                if (!string.IsNullOrWhiteSpace(errors))
-                {
-                    foreach (string line in errors.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        string trimmed = line.Trim();
-                        if (trimmed.StartsWith("@@LOG_ERROR ")) API.Log(_rmHandle, API.LogType.Error, trimmed.Substring(12));
-                        else API.Log(_rmHandle, API.LogType.Error, trimmed);
-                    }
-                }
-
-                if (proc.ExitCode != 0)
-                {
-                    API.Log(_rmHandle, API.LogType.Warning, $"Node.js '{mode}' process exited with code {proc.ExitCode}.");
-                    return (null, "");
-                }
 
                 double? numResult = null;
                 string strResult = "";
                 string resultPrefix = mode == "custom" ? "@@CUSTOM_RESULT " : (mode == "init" ? "@@INIT_RESULT " : "@@UPDATE_RESULT ");
 
-                foreach (string line in output.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                // Process output line-by-line instead of all at once
+                string line;
+                while ((line = proc.StandardOutput.ReadLine()) != null)
                 {
                     string trimmed = line.Trim();
                     if (trimmed.StartsWith("@@LOG_NOTICE ")) { API.Log(_rmHandle, API.LogType.Notice, trimmed.Substring(13)); }
                     else if (trimmed.StartsWith("@@LOG_WARNING ")) { API.Log(_rmHandle, API.LogType.Warning, trimmed.Substring(14)); }
                     else if (trimmed.StartsWith("@@LOG_DEBUG ")) { API.Log(_rmHandle, API.LogType.Debug, trimmed.Substring(12)); }
+                    else if (trimmed.StartsWith("@@RM_EXECUTE "))
+                    {
+                        string command = trimmed.Substring(13);
+                        try
+                        {
+                            var api = new API(_rmHandle);
+                            api.Execute(command);
+                            API.Log(_rmHandle, API.LogType.Notice, $"Executed Rainmeter command: {command}");
+                        }
+                        catch (Exception ex)
+                        {
+                            API.Log(_rmHandle, API.LogType.Error, $"Error executing Rainmeter command '{command}': {ex.Message}");
+                        }
+                    }
+                    else if (trimmed.StartsWith("@@RM_GETVARIABLE "))
+                    {
+                        // Node is asking for a variable.
+                        string varRequest = trimmed.Substring(17);
+                        string[] parts = varRequest.Split(new[] { '|' }, 2);
+                        string varName = parts.Length > 0 ? parts[0] : "";
+                        string defaultValue = parts.Length > 1 ? parts[1] : "";
+                        string varValue = defaultValue;
+
+                        try
+                        {
+                            var api = new API(_rmHandle);
+                            string replacedValue = api.ReplaceVariables($"#{varName}#");
+                            // If the variable doesn't exist, ReplaceVariables returns the original string literal
+                            if (replacedValue != $"#{varName}#")
+                            {
+                                varValue = replacedValue;
+                            }
+                            API.Log(_rmHandle, API.LogType.Notice, $"Variable {varName} = {varValue}");
+                        }
+                        catch (Exception ex)
+                        {
+                            API.Log(_rmHandle, API.LogType.Error, $"Error getting variable '{varName}': {ex.Message}");
+                        }
+
+                        // Send the result back to the Node process via its standard input.
+                        proc.StandardInput.WriteLine(varValue);
+                        proc.StandardInput.Flush();
+                    }
                     else if (trimmed.StartsWith(resultPrefix))
                     {
                         string payload = trimmed.Substring(resultPrefix.Length);
-                        strResult = payload; 
+                        strResult = payload;
 
                         if (!string.IsNullOrEmpty(payload))
                         {
@@ -205,6 +340,25 @@ namespace NodeJSPlugin
                     }
                     else { API.Log(_rmHandle, API.LogType.Notice, line); }
                 }
+
+                proc.WaitForExit();
+
+                string allErrors = errors.ToString();
+                if (!string.IsNullOrWhiteSpace(allErrors))
+                {
+                    foreach (string errorLine in allErrors.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string trimmed = errorLine.Trim();
+                        if (trimmed.StartsWith("@@LOG_ERROR ")) API.Log(_rmHandle, API.LogType.Error, trimmed.Substring(12));
+                        else API.Log(_rmHandle, API.LogType.Error, trimmed);
+                    }
+                }
+
+                if (proc.ExitCode != 0)
+                {
+                    API.Log(_rmHandle, API.LogType.Warning, $"Node.js '{mode}' process exited with code {proc.ExitCode}.");
+                }
+
                 return (numResult, strResult);
             }
             catch (Exception ex)
@@ -216,6 +370,9 @@ namespace NodeJSPlugin
 
         private static void RunNodeAsync()
         {
+            // Note: Asynchronous mode does not support GetVariable.
+            // This would require a much more complex implementation.
+            // For now, only synchronous calls (Initialize, Bangs) support GetVariable.
             string currentWrapperPath = _wrapperPath;
             string currentScriptFile = _scriptFile;
             IntPtr currentRmHandle = _rmHandle;
@@ -246,7 +403,9 @@ namespace NodeJSPlugin
                         RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true,
-                        WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(currentScriptFile)) ?? Environment.CurrentDirectory
+                        WorkingDirectory = !string.IsNullOrEmpty(currentScriptFile) ?
+                            (Path.GetDirectoryName(Path.GetFullPath(currentScriptFile)) ?? Environment.CurrentDirectory) :
+                            Environment.CurrentDirectory
                     };
 
                     using var proc = Process.Start(psi);
@@ -266,6 +425,25 @@ namespace NodeJSPlugin
                             else if (line.StartsWith("@@LOG_WARNING ")) { API.Log(currentRmHandle, API.LogType.Warning, line.Substring(14)); }
                             else if (line.StartsWith("@@LOG_DEBUG ")) { API.Log(currentRmHandle, API.LogType.Debug, line.Substring(12)); }
                             else if (line.StartsWith("@@LOG_ERROR ")) { API.Log(currentRmHandle, API.LogType.Error, line.Substring(12)); }
+                            else if (line.StartsWith("@@RM_EXECUTE "))
+                            {
+                                string command = line.Substring(13);
+                                try
+                                {
+                                    var api = new API(currentRmHandle);
+                                    api.Execute(command);
+                                    API.Log(currentRmHandle, API.LogType.Notice, $"Executed Rainmeter command: {command}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    API.Log(currentRmHandle, API.LogType.Error, $"Error executing Rainmeter command '{command}': {ex.Message}");
+                                }
+                            }
+                            else if (line.StartsWith("@@RM_GETVARIABLE "))
+                            {
+                                // This case is intentionally not handled in async mode as it would be very complex.
+                                API.Log(currentRmHandle, API.LogType.Warning, "RM.GetVariable is not supported in asynchronous 'update' calls. Use bangs or initialize for this functionality.");
+                            }
                             else if (line.StartsWith("@@UPDATE_RESULT "))
                             {
                                 string payload = line.Substring(16);
@@ -309,7 +487,7 @@ namespace NodeJSPlugin
                         API.Log(currentRmHandle, API.LogType.Warning, $"Node.js 'update' process exited with code {proc.ExitCode}.");
                     }
                 }
-                catch (OperationCanceledException) {  }
+                catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
                     if (!token.IsCancellationRequested)
@@ -321,10 +499,37 @@ namespace NodeJSPlugin
                 {
                     if (!string.IsNullOrEmpty(tempExecutionPath) && File.Exists(tempExecutionPath))
                     {
-                        try { File.Delete(tempExecutionPath); } catch {  }
+                        try { File.Delete(tempExecutionPath); } catch { }
                     }
                 }
             }, token);
+        }
+
+        private static string BuildInlineScript(API api)
+        {
+            var scriptLines = new List<string>();
+            int lineIndex = 1;
+
+            // Check for Line parameter first
+            string firstLine = api.ReadString("Line", "");
+            if (!string.IsNullOrEmpty(firstLine))
+            {
+                scriptLines.Add(firstLine);
+                lineIndex = 2;
+            }
+
+            // Then check for Line2, Line3, etc.
+            while (true)
+            {
+                string line = api.ReadString($"Line{lineIndex}", "");
+                if (string.IsNullOrEmpty(line))
+                    break;
+
+                scriptLines.Add(line);
+                lineIndex++;
+            }
+
+            return scriptLines.Count > 0 ? string.Join("\n", scriptLines) : "";
         }
 
         [DllExport]
@@ -390,6 +595,7 @@ namespace NodeJSPlugin
                 }
 
                 _scriptFile = "";
+                _inlineScript = "";
                 _wrapperPath = "";
                 _pluginState = PluginState.Uninitialized;
 
@@ -411,15 +617,16 @@ namespace NodeJSPlugin
             _rmHandle = rm;
             var api = new API(rm);
             string newScriptFile = api.ReadPath("ScriptFile", "").Trim();
+            string newInlineScript = BuildInlineScript(api);
 
             lock (_stateLock)
             {
-
+                // Check if anything has changed
                 if (_pluginState == PluginState.Initialized &&
                     newScriptFile == _scriptFile &&
+                    newInlineScript == _inlineScript &&
                     !_forceReload)
                 {
-
                     return;
                 }
 
@@ -428,14 +635,13 @@ namespace NodeJSPlugin
                     _forceReload = false;
                     API.Log(_rmHandle, API.LogType.Notice, "Forced reload: Cleaning up previous state...");
                 }
-                else if (newScriptFile != _scriptFile)
+                else if (newScriptFile != _scriptFile || newInlineScript != _inlineScript)
                 {
-                    API.Log(_rmHandle, API.LogType.Notice, "Script file changed: Cleaning up previous state...");
+                    API.Log(_rmHandle, API.LogType.Notice, "Script changed: Cleaning up previous state...");
                 }
 
                 if (_pluginState == PluginState.Initialized || _pluginState == PluginState.Initializing)
                 {
-
                     _cancellationTokenSource?.Cancel();
                     _cancellationTokenSource?.Dispose();
 
@@ -446,7 +652,7 @@ namespace NodeJSPlugin
                             File.Delete(_wrapperPath);
                         }
                     }
-                    catch {  }
+                    catch { }
 
                     lock (_valueLock)
                     {
@@ -458,15 +664,27 @@ namespace NodeJSPlugin
 
                 _pluginState = PluginState.Initializing;
                 _scriptFile = newScriptFile;
+                _inlineScript = newInlineScript;
 
                 _cancellationTokenSource = new CancellationTokenSource();
             }
 
-            if (string.IsNullOrWhiteSpace(_scriptFile))
+            // Validate that we have either a script file or inline script
+            if (string.IsNullOrWhiteSpace(_scriptFile) && string.IsNullOrWhiteSpace(_inlineScript))
             {
-                API.Log(_rmHandle, API.LogType.Error, "ScriptFile not set for NodeJS measure.");
+                API.Log(_rmHandle, API.LogType.Error, "Neither ScriptFile nor Line parameters are set for NodeJS measure.");
                 lock (_stateLock) { _pluginState = PluginState.Uninitialized; }
                 return;
+            }
+
+            // Log what type of script we're using
+            if (!string.IsNullOrWhiteSpace(_inlineScript))
+            {
+                API.Log(_rmHandle, API.LogType.Notice, "Using inline script with " + _inlineScript.Split('\n').Length + " lines.");
+            }
+            else
+            {
+                API.Log(_rmHandle, API.LogType.Notice, "Using script file: " + _scriptFile);
             }
 
             CreateWrapper();
@@ -502,8 +720,8 @@ namespace NodeJSPlugin
         [DllExport]
         public static double Update(IntPtr data)
         {
-
-            if (_pluginState == PluginState.Initialized && !string.IsNullOrWhiteSpace(_scriptFile))
+            if (_pluginState == PluginState.Initialized &&
+                (!string.IsNullOrWhiteSpace(_scriptFile) || !string.IsNullOrWhiteSpace(_inlineScript)))
             {
                 RunNodeAsync();
             }
@@ -556,6 +774,44 @@ namespace NodeJSPlugin
             }
         }
 
+        // *** NEW METHOD ***
+        // This method allows calling a JS function directly from a measure and getting its string return value.
+        // Usage in Rainmeter: [&MeasureName:Call("MyFunction(arg1, 'arg2')")]
+        [DllExport]
+        public static IntPtr Call(IntPtr data, int argc, [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr, SizeParamIndex = 1)] string[] argv)
+        {
+            if (argc == 0 || string.IsNullOrWhiteSpace(argv[0]))
+            {
+                return IntPtr.Zero;
+            }
+
+            if (_pluginState != PluginState.Initialized)
+            {
+                API.Log(_rmHandle, API.LogType.Warning, "Cannot execute inline call: Plugin not initialized.");
+                return IntPtr.Zero;
+            }
+
+            string functionCall = argv[0];
+
+            try
+            {
+                var (_, resultString) = RunNodeSynchronous("custom", functionCall.Trim());
+
+                if (resultString != null)
+                {
+                    // Rainmeter is responsible for freeing this memory.
+                    return Marshal.StringToHGlobalUni(resultString);
+                }
+            }
+            catch (Exception ex)
+            {
+                API.Log(_rmHandle, API.LogType.Error, $"Inline call '{functionCall}' exception: {ex.Message}");
+            }
+
+            return IntPtr.Zero;
+        }
+
+
         [DllExport]
         public static IntPtr GetString(IntPtr data)
         {
@@ -563,7 +819,6 @@ namespace NodeJSPlugin
             {
                 if (_hasStringValue && !string.IsNullOrEmpty(_lastStringValue))
                 {
-
                     return Marshal.StringToHGlobalUni(_lastStringValue);
                 }
             }
