@@ -15,7 +15,7 @@ namespace NodeJSPlugin
 
                 string wrapperCode = GenerateWrapperCode(scriptContent);
                 string tempPath = CreateTempWrapperFile(wrapperCode);
-
+                
                 CleanupOldWrapper();
                 Plugin._wrapperPath = tempPath;
             }
@@ -31,14 +31,14 @@ namespace NodeJSPlugin
             {
                 return GenerateInlineScriptModule(Plugin._inlineScript);
             }
-
+            
             if (!string.IsNullOrWhiteSpace(Plugin._scriptFile))
             {
                 string scriptFull = Path.GetFullPath(Plugin._scriptFile);
                 string escapedScriptPath = scriptFull.Replace("\\", "\\\\").Replace("'", "\\'");
                 return $"require('{escapedScriptPath}')";
             }
-
+            
             return null;
         }
 
@@ -47,8 +47,19 @@ namespace NodeJSPlugin
             return $@"
   let scriptModule = null;
   try {{
-    scriptModule = {{}};
-    const scriptFunction = new Function('module', 'exports', 'RM', `
+    // Create a proper module context with require support
+    const Module = require('module');
+    const path = require('path');
+    
+    // Set up module context
+    const moduleObj = new Module();
+    moduleObj.filename = __filename;
+    moduleObj.paths = Module._nodeModulePaths(process.cwd());
+    
+    // Create script function with proper context
+    const scriptFunction = new Function(
+      'module', 'exports', 'require', '__filename', '__dirname', 'RM', 'global', 'process', 'console',
+      `
       {inlineScript}
       
       if (typeof initialize !== 'undefined') module.exports.initialize = initialize;
@@ -59,10 +70,23 @@ namespace NodeJSPlugin
           module.exports[key] = this[key];
         }}
       }}
-    `);
+      `
+    );
     
-    const moduleObj = {{ exports: {{}} }};
-    scriptFunction.call({{}}, moduleObj, moduleObj.exports, RM);
+    // Execute with full Node.js context
+    scriptFunction.call(
+      {{}}, 
+      moduleObj, 
+      moduleObj.exports, 
+      moduleObj.require.bind(moduleObj),
+      moduleObj.filename,
+      path.dirname(moduleObj.filename),
+      RM,
+      global,
+      process,
+      console
+    );
+    
     scriptModule = moduleObj.exports;
   }} catch (e) {{
     console.error('Script compilation error:', e.message);
@@ -73,9 +97,9 @@ namespace NodeJSPlugin
         private static string GenerateWrapperCode(string scriptContent)
         {
             bool isInlineScript = !string.IsNullOrWhiteSpace(Plugin._inlineScript);
-
-            string scriptModuleCode = isInlineScript ?
-                scriptContent :
+            
+            string scriptModuleCode = isInlineScript ? 
+                scriptContent : 
                 $@"
   let scriptModule = null;
   try {{
@@ -202,7 +226,7 @@ namespace NodeJSPlugin
             string tempDir = Path.GetTempPath();
             string fileName = "RainNodeWrapper_" + Guid.NewGuid().ToString("N") + ".js";
             string filePath = Path.Combine(tempDir, fileName);
-
+            
             File.WriteAllText(filePath, wrapperCode);
             return filePath;
         }
