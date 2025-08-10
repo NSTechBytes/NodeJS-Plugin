@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -7,40 +8,76 @@ using Rainmeter;
 
 namespace NodeJSPlugin
 {
+    // Instance data class to hold per-measure data
+    internal class PluginInstanceData
+    {
+        public string ScriptFile { get; set; } = "";
+        public string InlineScript { get; set; } = "";
+        public string WrapperPath { get; set; } = "";
+        public double LastValue { get; set; } = 0.0;
+        public string LastStringValue { get; set; } = "";
+        public bool HasStringValue { get; set; } = false;
+        public readonly object ValueLock = new object();
+        public CancellationTokenSource CancellationTokenSource { get; set; }
+        public Plugin.PluginState State { get; set; } = Plugin.PluginState.Uninitialized;
+        public readonly object StateLock = new object();
+        public bool ForceReload { get; set; } = false;
+        public IntPtr RmHandle { get; set; } = IntPtr.Zero;
+
+        // Instance-specific process management
+        public Process PersistentProcess { get; set; } = null;
+        public readonly object PersistentProcessLock = new object();
+        public bool PersistentProcessInitialized { get; set; } = false;
+    }
+
     public static class Plugin
     {
         internal enum PluginState { Uninitialized, Initializing, Initialized }
 
-        internal static string _scriptFile = "";
-        internal static string _inlineScript = "";
-        internal static string _wrapperPath = "";
-        internal static IntPtr _rmHandle = IntPtr.Zero;
-        internal static double _lastValue = 0.0;
-        internal static string _lastStringValue = "";
-        internal static bool _hasStringValue = false;
-        internal static readonly object _valueLock = new object();
-        internal static CancellationTokenSource _cancellationTokenSource;
+        // Dictionary to store instance data per measure
+        private static readonly Dictionary<IntPtr, PluginInstanceData> _instances = new Dictionary<IntPtr, PluginInstanceData>();
+        private static readonly object _instancesLock = new object();
 
-        internal static volatile PluginState _pluginState = PluginState.Uninitialized;
-        internal static readonly object _stateLock = new object();
-        private static bool _forceReload = false;
+        // Helper method to get or create instance data
+        private static PluginInstanceData GetInstanceData(IntPtr data)
+        {
+            lock (_instancesLock)
+            {
+                if (!_instances.TryGetValue(data, out PluginInstanceData instance))
+                {
+                    instance = new PluginInstanceData();
+                    _instances[data] = instance;
+                }
+                return instance;
+            }
+        }
+
+        // Helper method to remove instance data
+        private static void RemoveInstanceData(IntPtr data)
+        {
+            lock (_instancesLock)
+            {
+                _instances.Remove(data);
+            }
+        }
 
         [DllExport]
         public static void Initialize(ref IntPtr data, IntPtr rm)
         {
-            _rmHandle = rm;
+            var instance = GetInstanceData(data);
+            instance.RmHandle = rm;
 
-            lock (_stateLock)
+            lock (instance.StateLock)
             {
-                _cancellationTokenSource?.Cancel();
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = new CancellationTokenSource();
+                instance.CancellationTokenSource?.Cancel();
+                instance.CancellationTokenSource?.Dispose();
+                instance.CancellationTokenSource = new CancellationTokenSource();
 
-                lock (_valueLock)
+                lock (instance.ValueLock)
                 {
-                    _lastValue = 0.0;
-                    _lastStringValue = "";
-                    _hasStringValue = false;
+                    instance.LastValue = 0.0;
+                    instance.LastStringValue = "";
+                    instance.HasStringValue = false;
                 }
             }
         }
@@ -48,105 +85,120 @@ namespace NodeJSPlugin
         [DllExport]
         public static void Finalize(IntPtr data)
         {
-            CleanupAndReset();
+            CleanupAndReset(data);
+            RemoveInstanceData(data);
         }
 
         [DllExport]
         public static void Reload(IntPtr data, IntPtr rm, ref double maxValue)
         {
-            _rmHandle = rm;
+            var instance = GetInstanceData(data);
+            instance.RmHandle = rm;
             var api = new API(rm);
             string newScriptFile = api.ReadPath("ScriptFile", "").Trim();
             string newInlineScript = BuildInlineScript(api);
 
-            // Check if configuration has actually changed
-            bool configurationChanged = newScriptFile != _scriptFile || newInlineScript != _inlineScript;
+            bool configurationChanged = newScriptFile != instance.ScriptFile || newInlineScript != instance.InlineScript;
             bool needsNewWrapper = false;
 
-            lock (_stateLock)
+            lock (instance.StateLock)
             {
-                // Skip reload if nothing changed and plugin is already initialized
-                if (_pluginState == PluginState.Initialized && !configurationChanged && !_forceReload)
+                if (instance.State == PluginState.Initialized && !configurationChanged && !instance.ForceReload)
                 {
-                    return; // No changes detected, keep existing wrapper
+                    return;
                 }
 
-                _forceReload = false;
+                instance.ForceReload = false;
 
-                // Only clean up if configuration changed or forced reload
-                if (configurationChanged || _forceReload)
+                if (configurationChanged || instance.ForceReload)
                 {
-                    // Clean up previous state if needed
-                    if (_pluginState == PluginState.Initialized || _pluginState == PluginState.Initializing)
+                    if (instance.State == PluginState.Initialized || instance.State == PluginState.Initializing)
                     {
-                        CleanupResources();
+                        CleanupResources(instance);
                     }
 
-                    _pluginState = PluginState.Initializing;
-                    _scriptFile = newScriptFile;
-                    _inlineScript = newInlineScript;
+                    instance.State = PluginState.Initializing;
+                    instance.ScriptFile = newScriptFile;
+                    instance.InlineScript = newInlineScript;
 
-                    // Cancel previous operations and create new token source
-                    _cancellationTokenSource?.Cancel();
-                    _cancellationTokenSource?.Dispose();
-                    _cancellationTokenSource = new CancellationTokenSource();
+                    instance.CancellationTokenSource?.Cancel();
+                    instance.CancellationTokenSource?.Dispose();
+                    instance.CancellationTokenSource = new CancellationTokenSource();
                 }
 
-                // Determine if we need a new wrapper
-                needsNewWrapper = string.IsNullOrEmpty(_wrapperPath) || !File.Exists(_wrapperPath) || configurationChanged;
+                needsNewWrapper = string.IsNullOrEmpty(instance.WrapperPath) || !File.Exists(instance.WrapperPath) || configurationChanged;
             }
 
-            // Validate script configuration
-            if (string.IsNullOrWhiteSpace(_scriptFile) && string.IsNullOrWhiteSpace(_inlineScript))
+            if (string.IsNullOrWhiteSpace(instance.ScriptFile) && string.IsNullOrWhiteSpace(instance.InlineScript))
             {
-                LogError("Neither ScriptFile nor Line parameters are configured.");
-                lock (_stateLock) { _pluginState = PluginState.Uninitialized; }
+                LogError(instance, "Neither ScriptFile nor Line parameters are configured.");
+                lock (instance.StateLock) { instance.State = PluginState.Uninitialized; }
                 return;
             }
 
             try
             {
-                // Only create wrapper if we don't have one or configuration changed
                 if (needsNewWrapper)
                 {
-                    Wrapper.CreateWrapper();
+                    Wrapper.CreateWrapper(instance);
                 }
 
-                var (initialValue, initialStringValue) = NodeProcess.RunNodeSynchronous("init");
+                var (initialValue, initialStringValue) = NodeProcess.RunNodeSynchronous(instance, "init");
 
-                lock (_stateLock)
+                lock (instance.StateLock)
                 {
-                    lock (_valueLock)
+                    lock (instance.ValueLock)
                     {
                         if (initialValue.HasValue)
-                            _lastValue = initialValue.Value;
+                            instance.LastValue = initialValue.Value;
 
-                        _lastStringValue = initialStringValue ?? "";
-                        _hasStringValue = !string.IsNullOrEmpty(_lastStringValue);
+                        instance.LastStringValue = initialStringValue ?? "";
+                        instance.HasStringValue = !string.IsNullOrEmpty(instance.LastStringValue);
                     }
 
-                    _pluginState = PluginState.Initialized;
+                    instance.State = PluginState.Initialized;
                 }
             }
             catch (Exception ex)
             {
-                LogError($"Script initialization failed: {GetSimpleErrorMessage(ex)}");
-                lock (_stateLock) { _pluginState = PluginState.Uninitialized; }
+                LogError(instance, $"Script initialization failed: {GetSimpleErrorMessage(ex)}");
+                lock (instance.StateLock) { instance.State = PluginState.Uninitialized; }
             }
         }
 
         [DllExport]
         public static double Update(IntPtr data)
         {
-            if (_pluginState == PluginState.Initialized &&
-                (!string.IsNullOrWhiteSpace(_scriptFile) || !string.IsNullOrWhiteSpace(_inlineScript)))
+            var instance = GetInstanceData(data);
+
+            if (instance.State == PluginState.Initialized &&
+                (!string.IsNullOrWhiteSpace(instance.ScriptFile) || !string.IsNullOrWhiteSpace(instance.InlineScript)))
             {
-                NodeProcess.RunNodeAsync();
+                try
+                {
+                    var (updateValue, updateString) = NodeProcess.RunNodeSynchronous(instance, "update");
+
+                    lock (instance.ValueLock)
+                    {
+                        if (updateValue.HasValue)
+                            instance.LastValue = updateValue.Value;
+
+                        if (!string.IsNullOrEmpty(updateString))
+                        {
+                            instance.LastStringValue = updateString;
+                            instance.HasStringValue = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogError(instance, $"Update execution failed: {GetSimpleErrorMessage(ex)}");
+                }
             }
 
-            lock (_valueLock)
+            lock (instance.ValueLock)
             {
-                return _lastValue;
+                return instance.LastValue;
             }
         }
 
@@ -155,39 +207,49 @@ namespace NodeJSPlugin
         {
             if (string.IsNullOrWhiteSpace(args)) return;
 
-            if (_pluginState != PluginState.Initialized)
+            var instance = GetInstanceData(data);
+
+            if (instance.State != PluginState.Initialized)
             {
-                LogError("Cannot execute function: Plugin not initialized.");
+                LogError(instance, "Cannot execute function: Plugin not initialized.");
                 return;
             }
 
             try
             {
-                var (resultValue, resultString) = NodeProcess.RunNodeSynchronous("custom", args.Trim());
+                string functionCall = args.Trim();
 
-                lock (_valueLock)
+                if (!functionCall.Contains("("))
+                {
+                    functionCall += "()";
+                }
+
+                var (resultValue, resultString) = NodeProcess.RunNodeSynchronous(instance, "custom", functionCall);
+
+                lock (instance.ValueLock)
                 {
                     if (resultValue.HasValue)
-                        _lastValue = resultValue.Value;
+                        instance.LastValue = resultValue.Value;
 
-                    _lastStringValue = resultString ?? "";
-                    _hasStringValue = !string.IsNullOrEmpty(_lastStringValue);
+                    instance.LastStringValue = resultString ?? "";
+                    instance.HasStringValue = !string.IsNullOrEmpty(instance.LastStringValue);
                 }
             }
             catch (Exception ex)
             {
-                LogError($"ExecuteBang failed: {GetSimpleErrorMessage(ex)}");
+                LogError(instance, $"ExecuteBang failed: {GetSimpleErrorMessage(ex)}");
             }
         }
 
         [DllExport]
         public static IntPtr GetString(IntPtr data)
         {
-            lock (_valueLock)
+            var instance = GetInstanceData(data);
+            lock (instance.ValueLock)
             {
-                if (_hasStringValue && !string.IsNullOrEmpty(_lastStringValue))
+                if (instance.HasStringValue && !string.IsNullOrEmpty(instance.LastStringValue))
                 {
-                    return Marshal.StringToHGlobalUni(_lastStringValue);
+                    return Marshal.StringToHGlobalUni(instance.LastStringValue);
                 }
             }
             return IntPtr.Zero;
@@ -199,82 +261,104 @@ namespace NodeJSPlugin
             if (argc == 0 || string.IsNullOrWhiteSpace(argv[0]))
                 return IntPtr.Zero;
 
-            if (_pluginState != PluginState.Initialized)
+            var instance = GetInstanceData(data);
+
+            if (instance.State != PluginState.Initialized)
             {
-                LogError("Cannot execute call: Plugin not initialized.");
+                LogError(instance, "Cannot execute call: Plugin not initialized.");
                 return IntPtr.Zero;
             }
 
             try
             {
-                var (_, resultString) = NodeProcess.RunNodeSynchronous("custom", argv[0].Trim());
+                string functionCall = argv[0].Trim();
+
+                if (!functionCall.Contains("("))
+                {
+                    functionCall += "()";
+                }
+
+                var (_, resultString) = NodeProcess.RunNodeSynchronous(instance, "custom", functionCall);
+
+                lock (instance.ValueLock)
+                {
+                    if (!string.IsNullOrEmpty(resultString))
+                    {
+                        instance.LastStringValue = resultString;
+                        instance.HasStringValue = true;
+
+                        if (double.TryParse(resultString, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double v))
+                        {
+                            instance.LastValue = v;
+                        }
+                    }
+                }
+
                 return resultString != null ? Marshal.StringToHGlobalUni(resultString) : IntPtr.Zero;
             }
             catch (Exception ex)
             {
-                LogError($"Call '{argv[0]}' failed: {GetSimpleErrorMessage(ex)}");
+                LogError(instance, $"Call '{argv[0]}' failed: {GetSimpleErrorMessage(ex)}");
                 return IntPtr.Zero;
             }
         }
 
-        private static void CleanupAndReset()
+        private static void CleanupAndReset(IntPtr data)
         {
-            lock (_stateLock)
+            var instance = GetInstanceData(data);
+            lock (instance.StateLock)
             {
-                _pluginState = PluginState.Uninitialized;
-                _forceReload = true;
+                instance.State = PluginState.Uninitialized;
+                instance.ForceReload = true;
 
-                // Cancel all running operations first
                 try
                 {
-                    _cancellationTokenSource?.Cancel();
-                    Thread.Sleep(100); // Give async operations time to cancel
+                    instance.CancellationTokenSource?.Cancel();
+                    Thread.Sleep(100);
                 }
                 catch { }
 
-                CleanupResources();
-                ResetState();
+                CleanupResources(instance);
+                ResetState(instance);
             }
         }
 
-        private static void CleanupResources()
+        private static void CleanupResources(PluginInstanceData instance)
         {
-            // First cleanup async Node processes
-            NodeProcess.CleanupAsyncOperations();
+            NodeProcess.CleanupAsyncOperations(instance);
 
-            // Cancel and dispose cancellation token source
             try
             {
-                _cancellationTokenSource?.Cancel();
-                _cancellationTokenSource?.Dispose();
-                _cancellationTokenSource = null;
+                instance.CancellationTokenSource?.Cancel();
+                instance.CancellationTokenSource?.Dispose();
+                instance.CancellationTokenSource = null;
             }
             catch { }
 
-            // Clean up wrapper file
             try
             {
-                if (!string.IsNullOrEmpty(_wrapperPath) && File.Exists(_wrapperPath))
+                if (!string.IsNullOrEmpty(instance.WrapperPath) && File.Exists(instance.WrapperPath))
                 {
-                    File.Delete(_wrapperPath);
-                    _wrapperPath = "";
+                    File.Delete(instance.WrapperPath);
+                    instance.WrapperPath = "";
                 }
             }
             catch { }
         }
 
-        private static void ResetState()
+        private static void ResetState(PluginInstanceData instance)
         {
-            _scriptFile = "";
-            _inlineScript = "";
-            _wrapperPath = "";
-            _pluginState = PluginState.Uninitialized;
+            instance.ScriptFile = "";
+            instance.InlineScript = "";
+            instance.WrapperPath = "";
+            instance.State = PluginState.Uninitialized;
 
-            lock (_valueLock)
+            lock (instance.ValueLock)
             {
-                _lastValue = 0.0;
-                _lastStringValue = "";
-                _hasStringValue = false;
+                instance.LastValue = 0.0;
+                instance.LastStringValue = "";
+                instance.HasStringValue = false;
             }
         }
 
@@ -298,10 +382,10 @@ namespace NodeJSPlugin
             return scriptLines.Count > 0 ? string.Join("\n", scriptLines) : "";
         }
 
-        private static void LogError(string message)
+        private static void LogError(PluginInstanceData instance, string message)
         {
-            if (_rmHandle != IntPtr.Zero)
-                API.Log(_rmHandle, API.LogType.Error, message);
+            if (instance.RmHandle != IntPtr.Zero)
+                API.Log(instance.RmHandle, API.LogType.Error, message);
         }
 
         private static string GetSimpleErrorMessage(Exception ex)

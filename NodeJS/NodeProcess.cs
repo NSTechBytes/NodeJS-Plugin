@@ -28,7 +28,7 @@ namespace NodeJSPlugin
             StandardErrorEncoding = Encoding.UTF8
         };
 
-        internal static void CleanupAsyncOperations()
+        internal static void CleanupAsyncOperations(PluginInstanceData instance)
         {
             lock (_asyncLock)
             {
@@ -36,13 +36,12 @@ namespace NodeJSPlugin
                 {
                     _asyncCancellationTokenSource?.Cancel();
 
-                    // Kill any running async process
                     if (_currentAsyncProcess != null && !_currentAsyncProcess.HasExited)
                     {
                         try
                         {
                             _currentAsyncProcess.Kill();
-                            _currentAsyncProcess.WaitForExit(1000); // Wait up to 1 second
+                            _currentAsyncProcess.WaitForExit(1000);
                         }
                         catch { }
                         finally
@@ -58,69 +57,247 @@ namespace NodeJSPlugin
                 }
                 catch { }
             }
+
+            CleanupPersistentProcess(instance);
         }
 
-        internal static (double?, string) RunNodeSynchronous(string mode = "init", string customCall = "")
+        private static void CleanupPersistentProcess(PluginInstanceData instance)
         {
-            if (!ValidateWrapper()) return (null, "");
+            lock (instance.PersistentProcessLock)
+            {
+                try
+                {
+                    if (instance.PersistentProcess != null && !instance.PersistentProcess.HasExited)
+                    {
+                        try
+                        {
+                            instance.PersistentProcess.Kill();
+                            instance.PersistentProcess.WaitForExit(1000);
+                        }
+                        catch { }
+                    }
+
+                    instance.PersistentProcess?.Dispose();
+                    instance.PersistentProcess = null;
+                    instance.PersistentProcessInitialized = false;
+                }
+                catch { }
+            }
+        }
+
+        private static Process GetOrCreatePersistentProcess(PluginInstanceData instance)
+        {
+            lock (instance.PersistentProcessLock)
+            {
+                if (instance.PersistentProcess == null || instance.PersistentProcess.HasExited || !instance.PersistentProcessInitialized)
+                {
+                    CleanupPersistentProcess(instance);
+
+                    if (!NodeProcessHelper.ValidateWrapper(instance)) return null;
+
+                    var psi = CreateProcessStartInfo(instance, "persistent", "");
+                    instance.PersistentProcess = Process.Start(psi);
+
+                    if (instance.PersistentProcess != null)
+                    {
+                        SetupPersistentProcessHandlers(instance.PersistentProcess, instance);
+                        instance.PersistentProcess.BeginOutputReadLine();
+                        instance.PersistentProcess.BeginErrorReadLine();
+                        instance.PersistentProcessInitialized = true;
+                    }
+                }
+
+                return instance.PersistentProcess;
+            }
+        }
+
+        private static void SetupPersistentProcessHandlers(Process proc, PluginInstanceData instance)
+        {
+            var api = new API(instance.RmHandle);
+
+            proc.OutputDataReceived += (s, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+
+                try
+                {
+                    ProcessPersistentOutput(e.Data.Trim(), instance, api, proc);
+                }
+                catch (Exception ex)
+                {
+                    API.Log(instance.RmHandle, API.LogType.Error, $"Persistent output handler error: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                }
+            };
+
+            proc.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                {
+                    string error = e.Data.Trim();
+                    API.Log(instance.RmHandle, API.LogType.Error,
+                        error.StartsWith("@@LOG_ERROR ") ? error.Substring(12) : error);
+                }
+            };
+        }
+
+        private static void ProcessPersistentOutput(string line, PluginInstanceData instance, API api, Process proc)
+        {
+            if (NodeProcessHelper.ProcessLogMessage(line, instance)) return;
+
+            if (line.StartsWith("@@RM_EXECUTE "))
+            {
+                api.Execute(line.Substring(13));
+                return;
+            }
+
+            if (RainmeterCommands.ProcessRainmeterCommand(line, api, proc,instance)) return;
+
+            if (line.StartsWith("@@UPDATE_RESULT ") ||
+                line.StartsWith("@@INIT_RESULT ") ||
+                line.StartsWith("@@CUSTOM_RESULT "))
+            {
+                UpdatePersistentResult(line, instance);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(line) &&
+                !line.StartsWith("@@") &&
+                line.Trim() != "")
+            {
+                API.Log(instance.RmHandle, API.LogType.Notice, line);
+            }
+        }
+
+        private static void UpdatePersistentResult(string line, PluginInstanceData instance)
+        {
+            string payload = "";
+
+            if (line.StartsWith("@@UPDATE_RESULT "))
+                payload = line.Substring(16);
+            else if (line.StartsWith("@@INIT_RESULT "))
+                payload = line.Substring(14);
+            else if (line.StartsWith("@@CUSTOM_RESULT "))
+                payload = line.Substring(16);
+
+            lock (instance.ValueLock)
+            {
+                instance.LastStringValue = payload;
+                instance.HasStringValue = !string.IsNullOrEmpty(payload);
+
+                if (!string.IsNullOrEmpty(payload) &&
+                    double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
+                {
+                    instance.LastValue = v;
+                }
+            }
+        }
+
+        internal static (double?, string) RunNodeSynchronous(PluginInstanceData instance, string mode = "init", string customCall = "")
+        {
+            return RunWithPersistentProcess(instance, mode, customCall);
+        }
+
+        private static (double?, string) RunWithPersistentProcess(PluginInstanceData instance, string mode, string customCall)
+        {
+            var persistentProc = GetOrCreatePersistentProcess(instance);
+            if (persistentProc == null)
+            {
+                NodeProcessHelper.LogError(instance, "Failed to create persistent Node.js process.");
+                return (null, "");
+            }
 
             try
             {
-                var psi = CreateProcessStartInfo(mode, customCall);
-                using var proc = Process.Start(psi);
+                string command = mode;
+                if (!string.IsNullOrEmpty(customCall))
+                    command += $" {customCall}";
 
-                if (proc == null)
+                lock (instance.ValueLock)
                 {
-                    LogError($"Failed to start Node.js process for {mode}.");
-                    return (null, "");
+                    instance.LastStringValue = "";
+                    instance.HasStringValue = false;
                 }
 
-                var errors = new StringBuilder();
-                proc.ErrorDataReceived += (sender, args) => {
-                    if (!string.IsNullOrWhiteSpace(args.Data))
-                        errors.AppendLine(args.Data);
-                };
-                proc.BeginErrorReadLine();
+                NodeProcessHelper.SendToNode(persistentProc, command);
 
-                double? numResult = null;
-                string strResult = "";
-                string resultPrefix = GetResultPrefix(mode);
-                var api = new API(Plugin._rmHandle);
+                int timeout = 0;
+                const int maxTimeout = 50;
 
-                ProcessNodeOutput(proc, api, resultPrefix, ref numResult, ref strResult);
-                proc.WaitForExit();
+                while (timeout < maxTimeout)
+                {
+                    Thread.Sleep(10);
+                    timeout++;
 
-                HandleErrors(errors.ToString());
+                    lock (instance.ValueLock)
+                    {
+                        if (instance.HasStringValue)
+                        {
+                            double? numResult = null;
+                            if (!string.IsNullOrEmpty(instance.LastStringValue) &&
+                                double.TryParse(instance.LastStringValue, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
+                            {
+                                numResult = v;
+                            }
 
-                if (proc.ExitCode != 0)
-                    LogError($"Node.js '{mode}' process exited with code {proc.ExitCode}.");
+                            return (numResult, instance.LastStringValue);
+                        }
+                    }
+                }
 
-                return (numResult, strResult);
+                lock (instance.ValueLock)
+                {
+                    double? numResult = null;
+                    if (!string.IsNullOrEmpty(instance.LastStringValue) &&
+                        double.TryParse(instance.LastStringValue, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
+                    {
+                        numResult = v;
+                    }
+
+                    return (numResult, instance.LastStringValue);
+                }
             }
             catch (Exception ex)
             {
-                LogError($"Node execution failed: {GetSimpleErrorMessage(ex)}");
+                NodeProcessHelper.LogError(instance, $"Persistent process execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                CleanupPersistentProcess(instance);
                 return (null, "");
             }
         }
 
-        internal static void RunNodeAsync()
+        internal static void RunNodeAsync(PluginInstanceData instance)
         {
-            // Prevent multiple async executions from running simultaneously
+            var persistentProc = GetOrCreatePersistentProcess(instance);
+            if (persistentProc != null && !persistentProc.HasExited)
+            {
+                try
+                {
+                    NodeProcessHelper.SendToNode(persistentProc, "update");
+                    return;
+                }
+                catch
+                {
+                    // Fall back to original async method
+                }
+            }
+
+            RunNodeAsyncOriginal(instance);
+        }
+
+        private static void RunNodeAsyncOriginal(PluginInstanceData instance)
+        {
             lock (_asyncLock)
             {
                 if (_asyncRunning)
                 {
-                    return; // Skip this update if async is already running
+                    return;
                 }
                 _asyncRunning = true;
             }
 
-            string currentWrapperPath = Plugin._wrapperPath;
-            string currentScriptFile = Plugin._scriptFile;
-            IntPtr currentRmHandle = Plugin._rmHandle;
+            string currentWrapperPath = instance.WrapperPath;
+            string currentScriptFile = instance.ScriptFile;
+            IntPtr currentRmHandle = instance.RmHandle;
 
-            // Cancel any previous async operation
             _asyncCancellationTokenSource?.Cancel();
             _asyncCancellationTokenSource?.Dispose();
             _asyncCancellationTokenSource = new CancellationTokenSource();
@@ -130,18 +307,17 @@ namespace NodeJSPlugin
             {
                 try
                 {
-                    if (token.IsCancellationRequested || !ValidateWrapper())
+                    if (token.IsCancellationRequested || !NodeProcessHelper.ValidateWrapper(instance))
                         return;
 
-                    string tempExecutionPath = CreateTempWrapper(currentWrapperPath);
+                    string tempExecutionPath = NodeProcessHelper.CreateTempWrapper(currentWrapperPath);
                     if (string.IsNullOrEmpty(tempExecutionPath))
                         return;
 
                     token.ThrowIfCancellationRequested();
-                    await ExecuteAsyncNodeProcessAsync(tempExecutionPath, currentScriptFile, currentRmHandle, token);
+                    await ExecuteAsyncNodeProcessAsync(tempExecutionPath, currentScriptFile, currentRmHandle, instance, token);
 
-                    // Clean up temp file
-                    CleanupTempFile(tempExecutionPath);
+                    NodeProcessHelper.CleanupTempFile(tempExecutionPath);
                 }
                 catch (OperationCanceledException)
                 {
@@ -150,7 +326,7 @@ namespace NodeJSPlugin
                 catch (Exception ex)
                 {
                     if (!token.IsCancellationRequested)
-                        API.Log(currentRmHandle, API.LogType.Error, $"Async execution failed: {GetSimpleErrorMessage(ex)}");
+                        API.Log(currentRmHandle, API.LogType.Error, $"Async execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
                 }
                 finally
                 {
@@ -174,19 +350,9 @@ namespace NodeJSPlugin
             }, token);
         }
 
-        private static bool ValidateWrapper()
+        private static ProcessStartInfo CreateProcessStartInfo(PluginInstanceData instance, string mode, string customCall)
         {
-            if (string.IsNullOrWhiteSpace(Plugin._wrapperPath) || !File.Exists(Plugin._wrapperPath))
-            {
-                LogError("Wrapper file does not exist.");
-                return false;
-            }
-            return true;
-        }
-
-        private static ProcessStartInfo CreateProcessStartInfo(string mode, string customCall)
-        {
-            string arguments = $"\"{Plugin._wrapperPath}\" {mode}";
+            string arguments = $"\"{instance.WrapperPath}\" {mode}";
             if (!string.IsNullOrEmpty(customCall))
                 arguments += $" \"{customCall}\"";
 
@@ -199,255 +365,13 @@ namespace NodeJSPlugin
                 CreateNoWindow = DefaultProcessStartInfo.CreateNoWindow,
                 StandardOutputEncoding = DefaultProcessStartInfo.StandardOutputEncoding,
                 StandardErrorEncoding = DefaultProcessStartInfo.StandardErrorEncoding,
-                WorkingDirectory = GetWorkingDirectory()
+                WorkingDirectory = NodeProcessHelper.GetWorkingDirectory(instance)
             };
 
             return psi;
         }
 
-        private static string GetWorkingDirectory()
-        {
-            if (!string.IsNullOrEmpty(Plugin._scriptFile))
-            {
-                return Path.GetDirectoryName(Path.GetFullPath(Plugin._scriptFile)) ?? Environment.CurrentDirectory;
-            }
-            return Environment.CurrentDirectory;
-        }
-
-        private static string GetResultPrefix(string mode)
-        {
-            return mode switch
-            {
-                "custom" => "@@CUSTOM_RESULT ",
-                "init" => "@@INIT_RESULT ",
-                _ => "@@UPDATE_RESULT "
-            };
-        }
-
-        private static void ProcessNodeOutput(Process proc, API api, string resultPrefix, ref double? numResult, ref string strResult)
-        {
-            string line;
-            while ((line = proc.StandardOutput.ReadLine()) != null)
-            {
-                string trimmed = line.Trim();
-
-                if (ProcessLogMessage(trimmed)) continue;
-                if (ProcessRainmeterCommand(trimmed, api, proc)) continue;
-                if (ProcessResult(trimmed, resultPrefix, ref numResult, ref strResult)) continue;
-
-                // Only log non-empty lines that aren't internal commands
-                if (!string.IsNullOrWhiteSpace(trimmed) &&
-                    !trimmed.StartsWith("@@") &&
-                    trimmed != "")
-                {
-                    API.Log(Plugin._rmHandle, API.LogType.Notice, line);
-                }
-            }
-        }
-
-        private static bool ProcessLogMessage(string trimmed)
-        {
-            var logMappings = new[]
-            {
-                ("@@LOG_NOTICE ", API.LogType.Notice, 13),
-                ("@@LOG_WARNING ", API.LogType.Warning, 14),
-                ("@@LOG_DEBUG ", API.LogType.Debug, 12),
-                ("@@LOG_ERROR ", API.LogType.Error, 12)
-            };
-
-            foreach (var (prefix, logType, offset) in logMappings)
-            {
-                if (trimmed.StartsWith(prefix))
-                {
-                    API.Log(Plugin._rmHandle, logType, trimmed.Substring(offset));
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static bool ProcessRainmeterCommand(string trimmed, API api, Process proc)
-        {
-            if (trimmed.StartsWith("@@RM_EXECUTE "))
-            {
-                api.Execute(trimmed.Substring(13));
-                return true;
-            }
-
-            try
-            {
-                // Handle each command individually with proper parameter parsing
-                if (trimmed.StartsWith("@@RM_GETVARIABLE "))
-                {
-                    string[] parts = trimmed.Substring(17).Split(new[] { '|' }, 2);
-                    string varName = parts.Length > 0 ? parts[0] : "";
-                    string defaultValue = parts.Length > 1 ? parts[1] : "";
-
-                    string varValue = api.ReplaceVariables($"#{varName}#");
-                    string result = varValue == $"#{varName}#" ? defaultValue : varValue;
-                    SendToNode(proc, result);
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READSTRINGFROMSECTION "))
-                {
-                    string[] parts = trimmed.Substring(27).Split(new[] { '|' }, 3);
-                    if (parts.Length >= 3)
-                    {
-                        string result = api.ReadStringFromSection(parts[0], parts[1], parts[2]);
-                        SendToNode(proc, result);
-                    }
-                    else
-                    {
-                        SendToNode(proc, "");
-                    }
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READSTRING "))
-                {
-                    string[] parts = trimmed.Substring(16).Split(new[] { '|' }, 2);
-                    string option = parts.Length > 0 ? parts[0] : "";
-                    string defaultValue = parts.Length > 1 ? parts[1] : "";
-
-                    string result = api.ReadString(option, defaultValue);
-                    SendToNode(proc, result);
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READDOUBLEFROMSECTION "))
-                {
-                    string[] parts = trimmed.Substring(27).Split(new[] { '|' }, 3);
-                    if (parts.Length >= 3)
-                    {
-                        string section = parts[0];
-                        string option = parts[1];
-                        double defaultValue = double.TryParse(parts[2], NumberStyles.Any, CultureInfo.InvariantCulture, out double defVal) ? defVal : 0.0;
-
-                        double result = api.ReadDoubleFromSection(section, option, defaultValue);
-                        SendToNode(proc, result.ToString(CultureInfo.InvariantCulture));
-                    }
-                    else
-                    {
-                        SendToNode(proc, "0");
-                    }
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READDOUBLE "))
-                {
-                    string[] parts = trimmed.Substring(16).Split(new[] { '|' }, 2);
-                    string option = parts.Length > 0 ? parts[0] : "";
-                    double defaultValue = parts.Length > 1 && double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out double defVal) ? defVal : 0.0;
-
-                    double result = api.ReadDouble(option, defaultValue);
-                    SendToNode(proc, result.ToString(CultureInfo.InvariantCulture));
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READINTFROMSECTION "))
-                {
-                    string[] parts = trimmed.Substring(24).Split(new[] { '|' }, 3);
-                    if (parts.Length >= 3)
-                    {
-                        string section = parts[0];
-                        string option = parts[1];
-                        int defaultValue = int.TryParse(parts[2], out int defVal) ? defVal : 0;
-
-                        int result = api.ReadIntFromSection(section, option, defaultValue);
-                        SendToNode(proc, result.ToString());
-                    }
-                    else
-                    {
-                        SendToNode(proc, "0");
-                    }
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_READINT "))
-                {
-                    string[] parts = trimmed.Substring(13).Split(new[] { '|' }, 2);
-                    string option = parts.Length > 0 ? parts[0] : "";
-                    int defaultValue = parts.Length > 1 && int.TryParse(parts[1], out int defVal) ? defVal : 0;
-
-                    int result = api.ReadInt(option, defaultValue);
-                    SendToNode(proc, result.ToString());
-                    return true;
-                }
-
-                // Simple commands without parameters
-                if (trimmed.StartsWith("@@RM_GETMEASURENAME"))
-                {
-                    SendToNode(proc, api.GetMeasureName());
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_GETSKINNAME"))
-                {
-                    SendToNode(proc, api.GetSkinName());
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_GETSKIN"))
-                {
-                    SendToNode(proc, api.GetSkin().ToString());
-                    return true;
-                }
-
-                if (trimmed.StartsWith("@@RM_GETSKINWINDOW"))
-                {
-                    SendToNode(proc, api.GetSkinWindow().ToString());
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogError($"RM command failed: {GetSimpleErrorMessage(ex)}");
-                SendToNode(proc, "");
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool ProcessResult(string trimmed, string resultPrefix, ref double? numResult, ref string strResult)
-        {
-            if (trimmed.StartsWith(resultPrefix))
-            {
-                string payload = trimmed.Substring(resultPrefix.Length);
-                strResult = payload;
-
-                if (!string.IsNullOrEmpty(payload) &&
-                    double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
-                {
-                    numResult = v;
-                }
-                return true;
-            }
-            return false;
-        }
-
-        private static string CreateTempWrapper(string currentWrapperPath)
-        {
-            try
-            {
-                lock (Plugin._stateLock)
-                {
-                    if (string.IsNullOrWhiteSpace(currentWrapperPath) || !File.Exists(currentWrapperPath))
-                        return null;
-
-                    string tempPath = Path.GetTempFileName();
-                    File.Copy(currentWrapperPath, tempPath, true);
-                    return tempPath;
-                }
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static async Task ExecuteAsyncNodeProcessAsync(string tempPath, string scriptFile, IntPtr rmHandle, CancellationToken token)
+        private static async Task ExecuteAsyncNodeProcessAsync(string tempPath, string scriptFile, IntPtr rmHandle, PluginInstanceData instance, CancellationToken token)
         {
             var psi = new ProcessStartInfo
             {
@@ -455,7 +379,7 @@ namespace NodeJSPlugin
                 Arguments = $"\"{tempPath}\" update",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                RedirectStandardInput = true, // Enable stdin for two-way communication
+                RedirectStandardInput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = !string.IsNullOrEmpty(scriptFile) ?
@@ -473,17 +397,15 @@ namespace NodeJSPlugin
                     return;
                 }
 
-                // Store reference for cleanup
                 lock (_asyncLock)
                 {
                     _currentAsyncProcess = proc;
                 }
 
-                SetupAsyncEventHandlersWithTwoWay(proc, rmHandle);
+                SetupAsyncEventHandlersWithTwoWay(proc, rmHandle, instance);
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                // Wait for process to complete with cancellation support
                 while (!proc.HasExited && !token.IsCancellationRequested)
                 {
                     await Task.Delay(50, token);
@@ -494,7 +416,7 @@ namespace NodeJSPlugin
                     try
                     {
                         proc.Kill();
-                        await Task.Delay(100, CancellationToken.None); // Brief wait for cleanup
+                        await Task.Delay(100, CancellationToken.None);
                     }
                     catch { }
                 }
@@ -504,7 +426,6 @@ namespace NodeJSPlugin
             }
             catch (OperationCanceledException)
             {
-                // Handle cancellation
                 if (proc != null && !proc.HasExited)
                 {
                     try
@@ -514,11 +435,11 @@ namespace NodeJSPlugin
                     }
                     catch { }
                 }
-                throw; // Re-throw to be handled by caller
+                throw;
             }
             catch (Exception ex)
             {
-                API.Log(rmHandle, API.LogType.Error, $"Async process execution failed: {GetSimpleErrorMessage(ex)}");
+                API.Log(rmHandle, API.LogType.Error, $"Async process execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
             }
             finally
             {
@@ -536,24 +457,26 @@ namespace NodeJSPlugin
             }
         }
 
-        private static void SetupAsyncEventHandlersWithTwoWay(Process proc, IntPtr rmHandle)
+        private static void SetupAsyncEventHandlersWithTwoWay(Process proc, IntPtr rmHandle, PluginInstanceData instance)
         {
             var api = new API(rmHandle);
 
-            proc.OutputDataReceived += (s, e) => {
+            proc.OutputDataReceived += (s, e) =>
+            {
                 if (string.IsNullOrEmpty(e.Data)) return;
 
                 try
                 {
-                    ProcessAsyncOutputWithTwoWay(e.Data.Trim(), rmHandle, api, proc);
+                    ProcessAsyncOutputWithTwoWay(e.Data.Trim(), rmHandle, api, proc, instance);
                 }
                 catch (Exception ex)
                 {
-                    API.Log(rmHandle, API.LogType.Error, $"Output handler error: {GetSimpleErrorMessage(ex)}");
+                    API.Log(rmHandle, API.LogType.Error, $"Output handler error: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
                 }
             };
 
-            proc.ErrorDataReceived += (s, e) => {
+            proc.ErrorDataReceived += (s, e) =>
+            {
                 if (!string.IsNullOrWhiteSpace(e.Data))
                 {
                     string error = e.Data.Trim();
@@ -563,9 +486,9 @@ namespace NodeJSPlugin
             };
         }
 
-        private static void ProcessAsyncOutputWithTwoWay(string line, IntPtr rmHandle, API api, Process proc)
+        private static void ProcessAsyncOutputWithTwoWay(string line, IntPtr rmHandle, API api, Process proc, PluginInstanceData instance)
         {
-            if (ProcessLogMessage(line)) return;
+            if (NodeProcessHelper.ProcessLogMessage(line, instance)) return;
 
             if (line.StartsWith("@@RM_EXECUTE "))
             {
@@ -573,16 +496,14 @@ namespace NodeJSPlugin
                 return;
             }
 
-            // Enable all RM API calls in async mode with two-way communication
-            if (ProcessRainmeterCommand(line, api, proc)) return;
+            if (RainmeterCommands.ProcessRainmeterCommand(line, api, proc,instance)) return;
 
             if (line.StartsWith("@@UPDATE_RESULT "))
             {
-                UpdateAsyncResult(line.Substring(16));
+                UpdateAsyncResult(line.Substring(16), instance);
                 return;
             }
 
-            // Only log non-empty lines that aren't internal commands
             if (!string.IsNullOrWhiteSpace(line) &&
                 !line.StartsWith("@@") &&
                 line.Trim() != "")
@@ -591,58 +512,19 @@ namespace NodeJSPlugin
             }
         }
 
-        private static void UpdateAsyncResult(string payload)
+        private static void UpdateAsyncResult(string payload, PluginInstanceData instance)
         {
-            lock (Plugin._valueLock)
+            lock (instance.ValueLock)
             {
-                Plugin._lastStringValue = payload;
-                Plugin._hasStringValue = !string.IsNullOrEmpty(payload);
+                instance.LastStringValue = payload;
+                instance.HasStringValue = !string.IsNullOrEmpty(payload);
 
                 if (!string.IsNullOrEmpty(payload) &&
                     double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
                 {
-                    Plugin._lastValue = v;
+                    instance.LastValue = v;
                 }
             }
-        }
-
-        private static void HandleErrors(string allErrors)
-        {
-            if (string.IsNullOrWhiteSpace(allErrors)) return;
-
-            foreach (string errorLine in allErrors.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                string cleanError = errorLine.StartsWith("@@LOG_ERROR ") ? errorLine.Substring(12) : errorLine;
-                API.Log(Plugin._rmHandle, API.LogType.Error, cleanError);
-            }
-        }
-
-        private static void CleanupTempFile(string tempPath)
-        {
-            if (!string.IsNullOrEmpty(tempPath) && File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); } catch { }
-            }
-        }
-
-        private static void SendToNode(Process proc, string message)
-        {
-            try
-            {
-                proc.StandardInput.WriteLine(message);
-                proc.StandardInput.Flush();
-            }
-            catch { }
-        }
-
-        private static void LogError(string message)
-        {
-            API.Log(Plugin._rmHandle, API.LogType.Error, message);
-        }
-
-        private static string GetSimpleErrorMessage(Exception ex)
-        {
-            return ex.InnerException?.Message ?? ex.Message;
         }
     }
 }

@@ -88,7 +88,10 @@
     <Compile Include="NodeJS.cs" />
     <Compile Include="$(SolutionDir).\API\RainmeterAPI.cs" />
     <Compile Include="NodeProcess.cs" />
+    <Compile Include="NodeProcess.Helper.cs" />
+    <Compile Include="NodeProcess.RainmeterCommands.cs" />
     <Compile Include="Wrapper.cs" />
+    <Compile Include="Wrapper.Helper.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
