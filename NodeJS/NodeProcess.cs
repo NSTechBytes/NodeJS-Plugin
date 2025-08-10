@@ -455,6 +455,7 @@ namespace NodeJSPlugin
                 Arguments = $"\"{tempPath}\" update",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = true, // Enable stdin for two-way communication
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = !string.IsNullOrEmpty(scriptFile) ?
@@ -478,7 +479,7 @@ namespace NodeJSPlugin
                     _currentAsyncProcess = proc;
                 }
 
-                SetupAsyncEventHandlers(proc, rmHandle);
+                SetupAsyncEventHandlersWithTwoWay(proc, rmHandle);
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
@@ -535,14 +536,16 @@ namespace NodeJSPlugin
             }
         }
 
-        private static void SetupAsyncEventHandlers(Process proc, IntPtr rmHandle)
+        private static void SetupAsyncEventHandlersWithTwoWay(Process proc, IntPtr rmHandle)
         {
+            var api = new API(rmHandle);
+
             proc.OutputDataReceived += (s, e) => {
                 if (string.IsNullOrEmpty(e.Data)) return;
 
                 try
                 {
-                    ProcessAsyncOutput(e.Data.Trim(), rmHandle);
+                    ProcessAsyncOutputWithTwoWay(e.Data.Trim(), rmHandle, api, proc);
                 }
                 catch (Exception ex)
                 {
@@ -560,22 +563,18 @@ namespace NodeJSPlugin
             };
         }
 
-        private static void ProcessAsyncOutput(string line, IntPtr rmHandle)
+        private static void ProcessAsyncOutputWithTwoWay(string line, IntPtr rmHandle, API api, Process proc)
         {
             if (ProcessLogMessage(line)) return;
 
             if (line.StartsWith("@@RM_EXECUTE "))
             {
-                new API(rmHandle).Execute(line.Substring(13));
+                api.Execute(line.Substring(13));
                 return;
             }
 
-            if (line.StartsWith("@@RM_") && !line.StartsWith("@@RM_EXECUTE "))
-            {
-                API.Log(rmHandle, API.LogType.Warning,
-                    "RM API calls are not supported in async updates. Use bangs or initialize for this functionality.");
-                return;
-            }
+            // Enable all RM API calls in async mode with two-way communication
+            if (ProcessRainmeterCommand(line, api, proc)) return;
 
             if (line.StartsWith("@@UPDATE_RESULT "))
             {

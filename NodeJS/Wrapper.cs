@@ -15,7 +15,7 @@ namespace NodeJSPlugin
 
                 string wrapperCode = GenerateWrapperCode(scriptContent);
                 string tempPath = CreateTempWrapperFile(wrapperCode);
-                
+
                 CleanupOldWrapper();
                 Plugin._wrapperPath = tempPath;
             }
@@ -31,14 +31,14 @@ namespace NodeJSPlugin
             {
                 return GenerateInlineScriptModule(Plugin._inlineScript);
             }
-            
+
             if (!string.IsNullOrWhiteSpace(Plugin._scriptFile))
             {
                 string scriptFull = Path.GetFullPath(Plugin._scriptFile);
                 string escapedScriptPath = scriptFull.Replace("\\", "\\\\").Replace("'", "\\'");
                 return $"require('{escapedScriptPath}')";
             }
-            
+
             return null;
         }
 
@@ -97,9 +97,9 @@ namespace NodeJSPlugin
         private static string GenerateWrapperCode(string scriptContent)
         {
             bool isInlineScript = !string.IsNullOrWhiteSpace(Plugin._inlineScript);
-            
-            string scriptModuleCode = isInlineScript ? 
-                scriptContent : 
+
+            string scriptModuleCode = isInlineScript ?
+                scriptContent :
                 $@"
   let scriptModule = null;
   try {{
@@ -117,7 +117,7 @@ namespace NodeJSPlugin
   console.debug = (...args) => process.stdout.write('@@LOG_DEBUG ' + args.join(' ') + '\n');
   console.error = (...args) => process.stderr.write('@@LOG_ERROR ' + args.join(' ') + '\n');
 
-{GetRainmeterContext()}
+{GetRainmeterContextWithTwoWay()}
 
 {scriptModuleCode}
 
@@ -126,41 +126,169 @@ namespace NodeJSPlugin
 ";
         }
 
-        private static string GetRainmeterContext()
+        private static string GetRainmeterContextWithTwoWay()
         {
             return @"
   const fs = require('fs');
   
-  function readFromHost() {
+  // Enhanced read function with timeout and retry for async operations
+  function readFromHost(timeoutMs = 5000) {
     const BUFSIZE = 4096; 
     let buf = Buffer.alloc(BUFSIZE);
     let bytesRead = 0;
-    try {
-      bytesRead = fs.readSync(process.stdin.fd, buf, 0, BUFSIZE, null);
-    } catch (e) {
-      return '';
+    let attempts = 0;
+    const maxAttempts = Math.max(1, Math.floor(timeoutMs / 10));
+    
+    while (attempts < maxAttempts) {
+      try {
+        bytesRead = fs.readSync(process.stdin.fd, buf, 0, BUFSIZE, null);
+        if (bytesRead > 0) {
+          return buf.toString('utf8', 0, bytesRead).trim();
+        }
+      } catch (e) {
+        // If no data is available, wait a bit and retry
+        if (e.code === 'EAGAIN' || e.code === 'EWOULDBLOCK') {
+          attempts++;
+          // Use busy waiting for short intervals to maintain responsiveness
+          const start = Date.now();
+          while (Date.now() - start < 10) {
+            // Busy wait for 10ms
+          }
+          continue;
+        }
+        break;
+      }
+      attempts++;
     }
-    return bytesRead === 0 ? '' : buf.toString('utf8', 0, bytesRead).trim();
+    return '';
   }
 
   function rmRequest(command, ...args) {
-    process.stdout.write(command + (args.length ? ' ' + args.join('|') : '') + '\n');
-    return readFromHost();
+    try {
+      process.stdout.write(command + (args.length ? ' ' + args.join('|') : '') + '\n');
+      return readFromHost();
+    } catch (e) {
+      console.error('RM request failed:', e.message);
+      return '';
+    }
   }
 
+  // Enhanced RM object with better async support
   global.RM = {
-    Execute: (command) => process.stdout.write('@@RM_EXECUTE ' + command + '\n'),
-    GetVariable: (name, defaultValue = '') => rmRequest('@@RM_GETVARIABLE', name, defaultValue),
-    ReadString: (option, defValue = '') => rmRequest('@@RM_READSTRING', option, defValue),
-    ReadStringFromSection: (section, option, defValue = '') => rmRequest('@@RM_READSTRINGFROMSECTION', section, option, defValue),
-    ReadDouble: (option, defValue = 0.0) => parseFloat(rmRequest('@@RM_READDOUBLE', option, defValue)),
-    ReadDoubleFromSection: (section, option, defValue = 0.0) => parseFloat(rmRequest('@@RM_READDOUBLEFROMSECTION', section, option, defValue)),
-    ReadInt: (option, defValue = 0) => parseInt(rmRequest('@@RM_READINT', option, defValue), 10),
-    ReadIntFromSection: (section, option, defValue = 0) => parseInt(rmRequest('@@RM_READINTFROMSECTION', section, option, defValue), 10),
-    GetMeasureName: () => rmRequest('@@RM_GETMEASURENAME'),
-    GetSkinName: () => rmRequest('@@RM_GETSKINNAME'),
-    GetSkin: () => rmRequest('@@RM_GETSKIN'),
-    GetSkinWindow: () => rmRequest('@@RM_GETSKINWINDOW')
+    Execute: (command) => {
+      try {
+        process.stdout.write('@@RM_EXECUTE ' + command + '\n');
+      } catch (e) {
+        console.error('RM.Execute failed:', e.message);
+      }
+    },
+    
+    GetVariable: (name, defaultValue = '') => {
+      try {
+        return rmRequest('@@RM_GETVARIABLE', name, defaultValue);
+      } catch (e) {
+        console.error('RM.GetVariable failed:', e.message);
+        return defaultValue;
+      }
+    },
+    
+    ReadString: (option, defValue = '') => {
+      try {
+        return rmRequest('@@RM_READSTRING', option, defValue);
+      } catch (e) {
+        console.error('RM.ReadString failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    ReadStringFromSection: (section, option, defValue = '') => {
+      try {
+        return rmRequest('@@RM_READSTRINGFROMSECTION', section, option, defValue);
+      } catch (e) {
+        console.error('RM.ReadStringFromSection failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    ReadDouble: (option, defValue = 0.0) => {
+      try {
+        const result = rmRequest('@@RM_READDOUBLE', option, defValue);
+        const parsed = parseFloat(result);
+        return isNaN(parsed) ? defValue : parsed;
+      } catch (e) {
+        console.error('RM.ReadDouble failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    ReadDoubleFromSection: (section, option, defValue = 0.0) => {
+      try {
+        const result = rmRequest('@@RM_READDOUBLEFROMSECTION', section, option, defValue);
+        const parsed = parseFloat(result);
+        return isNaN(parsed) ? defValue : parsed;
+      } catch (e) {
+        console.error('RM.ReadDoubleFromSection failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    ReadInt: (option, defValue = 0) => {
+      try {
+        const result = rmRequest('@@RM_READINT', option, defValue);
+        const parsed = parseInt(result, 10);
+        return isNaN(parsed) ? defValue : parsed;
+      } catch (e) {
+        console.error('RM.ReadInt failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    ReadIntFromSection: (section, option, defValue = 0) => {
+      try {
+        const result = rmRequest('@@RM_READINTFROMSECTION', section, option, defValue);
+        const parsed = parseInt(result, 10);
+        return isNaN(parsed) ? defValue : parsed;
+      } catch (e) {
+        console.error('RM.ReadIntFromSection failed:', e.message);
+        return defValue;
+      }
+    },
+    
+    GetMeasureName: () => {
+      try {
+        return rmRequest('@@RM_GETMEASURENAME');
+      } catch (e) {
+        console.error('RM.GetMeasureName failed:', e.message);
+        return '';
+      }
+    },
+    
+    GetSkinName: () => {
+      try {
+        return rmRequest('@@RM_GETSKINNAME');
+      } catch (e) {
+        console.error('RM.GetSkinName failed:', e.message);
+        return '';
+      }
+    },
+    
+    GetSkin: () => {
+      try {
+        return rmRequest('@@RM_GETSKIN');
+      } catch (e) {
+        console.error('RM.GetSkin failed:', e.message);
+        return '';
+      }
+    },
+    
+    GetSkinWindow: () => {
+      try {
+        return rmRequest('@@RM_GETSKINWINDOW');
+      } catch (e) {
+        console.error('RM.GetSkinWindow failed:', e.message);
+        return '';
+      }
+    }
   };
 
   const RM = global.RM;";
@@ -226,7 +354,7 @@ namespace NodeJSPlugin
             string tempDir = Path.GetTempPath();
             string fileName = "RainNodeWrapper_" + Guid.NewGuid().ToString("N") + ".js";
             string filePath = Path.Combine(tempDir, fileName);
-            
+
             File.WriteAllText(filePath, wrapperCode);
             return filePath;
         }
