@@ -1,108 +1,299 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NodeJS for Rainmeter - Documentation</title>
-    <meta name="description" content="Official documentation for the NodeJS plugin for Rainmeter. Learn how to run Node.js scripts directly in your Rainmeter skins.">
-    <meta name="keywords" content="Rainmeter, NodeJS, Plugin, JavaScript, Skin, Documentation">
-    <meta property="og:title" content="NodeJS for Rainmeter - Documentation">
-    <meta property="og:description" content="Official documentation for the NodeJS plugin for Rainmeter.">
-    <meta property="og:type" content="website">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <meta
+      name="description"
+      content="Official documentation for the NodeJS plugin for Rainmeter. Learn how to run Node.js scripts directly in your Rainmeter skins."
+    />
+    <meta
+      name="keywords"
+      content="Rainmeter, NodeJS, Plugin, JavaScript, Skin, Documentation"
+    />
+    <meta property="og:title" content="NodeJS for Rainmeter - Documentation" />
+    <meta
+      property="og:description"
+      content="Official documentation for the NodeJS plugin for Rainmeter."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-<link rel="stylesheet" href="./styles.css">
-</head>
-<body class="bg-gray-900 text-gray-100">
-
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="bg-gray-900 text-gray-100">
     <!-- Sidebar / Navigation -->
-    <aside id="sidebar" class="sidebar fixed top-0 left-0 h-full bg-gray-800 border-r border-gray-700 p-6 flex flex-col">
-        <div class="flex items-center justify-between mb-8">
-            <h1 class="text-2xl font-bold">NodeJS Plugin</h1>
-            <button id="close-sidebar-btn" class="lg:hidden text-white hover:text-gray-200">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </div>
-        <div class="relative mb-4">
-            <input type="search" id="search-bar" placeholder="Search docs..." class="search-input w-full p-2 pl-8 rounded-md border border-gray-600 bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <svg class="w-4 h-4 absolute left-2.5 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        </div>
-        <nav id="nav-menu" class="flex-grow overflow-y-auto pr-2">
-            <ul class="space-y-2">
-                <li><a href="#overview" class="block p-2 rounded-md hover:bg-gray-700">Overview</a></li>
-                <li><a href="#installation" class="block p-2 rounded-md hover:bg-gray-700">Installation</a></li>
-                <li><a href="#basic-usage" class="block p-2 rounded-md hover:bg-gray-700">Basic Usage</a></li>
-                <li><a href="#options" class="block p-2 rounded-md hover:bg-gray-700">Options / Parameters</a></li>
-                <li><a href="#functions" class="block p-2 rounded-md hover:bg-gray-700">Core Functions</a></li>
-                <li><a href="#rm-api" class="block p-2 rounded-md hover:bg-gray-700">RM API (in JS)</a></li>
-                <li><a href="#section-variables" class="block p-2 rounded-md hover:bg-gray-700">Section Variables</a></li>
-                <li><a href="#examples" class="block p-2 rounded-md hover:bg-gray-700">Examples</a></li>
-                <li><a href="#error-handling" class="block p-2 rounded-md hover:bg-gray-700">Error Handling</a></li>
-                <li><a href="#advanced-usage" class="block p-2 rounded-md hover:bg-gray-700">Advanced Usage</a></li>
-                <li><a href="#limitations" class="block p-2 rounded-md hover:bg-gray-700">Limitations</a></li>
-                <li><a href="#faq" class="block p-2 rounded-md hover:bg-gray-700">FAQ</a></li>
-                <li><a href="#download" class="block p-2 rounded-md hover:bg-gray-700">Download</a></li>
-                <li><a href="#license" class="block p-2 rounded-md hover:bg-gray-700">License & Credits</a></li>
-            </ul>
-        </nav>
-        <!-- Theme toggle button has been removed -->
+    <aside
+      id="sidebar"
+      class="sidebar fixed top-0 left-0 h-full bg-gray-800 border-r border-gray-700 p-6 flex flex-col"
+    >
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold">NodeJS Plugin</h1>
+        <button
+          id="close-sidebar-btn"
+          class="lg:hidden text-white hover:text-gray-200"
+        >
+          <svg
+            class="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            ></path>
+          </svg>
+        </button>
+      </div>
+      <div class="relative mb-4">
+        <input
+          type="search"
+          id="search-bar"
+          placeholder="Search docs..."
+          class="search-input w-full p-2 pl-8 rounded-md border border-gray-600 bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <svg
+          class="w-4 h-4 absolute left-2.5 top-3 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          ></path>
+        </svg>
+      </div>
+      <nav id="nav-menu" class="flex-grow overflow-y-auto pr-2">
+        <ul class="space-y-2">
+          <li>
+            <a href="#overview" class="block p-2 rounded-md hover:bg-gray-700"
+              >Overview</a
+            >
+          </li>
+          <li>
+            <a
+              href="#installation"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Installation</a
+            >
+          </li>
+          <li>
+            <a
+              href="#basic-usage"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Basic Usage</a
+            >
+          </li>
+          <li>
+            <a href="#options" class="block p-2 rounded-md hover:bg-gray-700"
+              >Options / Parameters</a
+            >
+          </li>
+          <li>
+            <a href="#functions" class="block p-2 rounded-md hover:bg-gray-700"
+              >Core Functions</a
+            >
+          </li>
+          <li>
+            <a href="#rm-api" class="block p-2 rounded-md hover:bg-gray-700"
+              >RM API (in JS)</a
+            >
+          </li>
+          <li>
+            <a
+              href="#section-variables"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Section Variables</a
+            >
+          </li>
+          <li>
+            <a href="#examples" class="block p-2 rounded-md hover:bg-gray-700"
+              >Examples</a
+            >
+          </li>
+          <li>
+            <a
+              href="#error-handling"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Error Handling</a
+            >
+          </li>
+          <li>
+            <a
+              href="#advanced-usage"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Advanced Usage</a
+            >
+          </li>
+          <li>
+            <a
+              href="#limitations"
+              class="block p-2 rounded-md hover:bg-gray-700"
+              >Limitations</a
+            >
+          </li>
+          <li>
+            <a href="#faq" class="block p-2 rounded-md hover:bg-gray-700"
+              >FAQ</a
+            >
+          </li>
+          <li>
+            <a href="#download" class="block p-2 rounded-md hover:bg-gray-700"
+              >Download</a
+            >
+          </li>
+          <li>
+            <a href="#license" class="block p-2 rounded-md hover:bg-gray-700"
+              >License & Credits</a
+            >
+          </li>
+        </ul>
+      </nav>
+      <!-- Theme toggle button has been removed -->
     </aside>
 
     <!-- Main Content -->
     <div id="main-content" class="main-content">
-        <header class="fixed top-0 left-0 right-0 h-16 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 flex items-center px-6 z-30 lg:left-[var(--sidebar-width)]">
-            <button id="open-sidebar-btn" class="lg:hidden mr-4 text-white hover:text-gray-200">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-            </button>
-            <h2 class="text-xl font-semibold" id="header-title">Overview</h2>
-        </header>
+      <header
+        class="fixed top-0 left-0 right-0 h-16 bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 flex items-center px-6 z-30 lg:left-[var(--sidebar-width)]"
+      >
+        <button
+          id="open-sidebar-btn"
+          class="lg:hidden mr-4 text-white hover:text-gray-200"
+        >
+          <svg
+            class="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            ></path>
+          </svg>
+        </button>
+        <h2 class="text-xl font-semibold" id="header-title">Overview</h2>
+      </header>
 
-        <main class="p-6 md:p-8 mt-16 prose dark:prose-invert max-w-none">
-            <section id="overview">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Overview</h2>
-                <p>The NodeJS plugin for Rainmeter allows you to harness the full power of Node.js directly within your skins. It acts as a bridge, enabling you to execute JavaScript files, run asynchronous operations, and interact with the Rainmeter API from a Node.js environment. This opens up a world of possibilities, from fetching data from complex APIs to performing heavy computations without freezing your desktop.</p>
-                <h3>Key Features</h3>
-                <ul>
-                    <li><strong>Full Node.js Environment:</strong> Use any Node.js module (e.g., <code>fs</code>, <code>axios</code>, <code>path</code>) in your scripts.</li>
-                    <li><strong>Asynchronous Execution:</strong> Run long-running tasks in the background without impacting Rainmeter's performance.</li>
-                    <li><strong>Two-Way Communication:</strong> Call Rainmeter API functions from your Node.js script and get results back.</li>
-                    <li><strong>Inline & File-Based Scripts:</strong> Write simple scripts directly in your .ini file or link to external <code>.js</code> files for more complex logic.</li>
-                    <li><strong>Dynamic Function Calls:</strong> Execute specific JavaScript functions on demand using <code>!ExecuteBang</code>.</li>
-                </ul>
-            </section>
+      <main class="p-6 md:p-8 mt-16 prose dark:prose-invert max-w-none">
+        <section id="overview">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">Overview</h2>
+          <p>
+            The NodeJS plugin for Rainmeter allows you to harness the full power
+            of Node.js directly within your skins. It acts as a bridge, enabling
+            you to execute JavaScript files, run asynchronous operations, and
+            interact with the Rainmeter API from a Node.js environment. This
+            opens up a world of possibilities, from fetching data from complex
+            APIs to performing heavy computations without freezing your desktop.
+          </p>
+          <h3>Key Features</h3>
+          <ul>
+            <li>
+              <strong>Full Node.js Environment:</strong> Use any Node.js module
+              (e.g., <code>fs</code>, <code>axios</code>, <code>path</code>) in
+              your scripts.
+            </li>
+            <li>
+              <strong>Asynchronous Execution:</strong> Run long-running tasks in
+              the background without impacting Rainmeter's performance.
+            </li>
+            <li>
+              <strong>Two-Way Communication:</strong> Call Rainmeter API
+              functions from your Node.js script and get results back.
+            </li>
+            <li>
+              <strong>Inline & File-Based Scripts:</strong> Write simple scripts
+              directly in your .ini file or link to external
+              <code>.js</code> files for more complex logic.
+            </li>
+            <li>
+              <strong>Dynamic Function Calls:</strong> Execute specific
+              JavaScript functions on demand using <code>!ExecuteBang</code>.
+            </li>
+          </ul>
+        </section>
 
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="installation">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Installation</h2>
-                <h3>Requirements</h3>
-                <ul>
-                    <li>Rainmeter 4.3 or higher.</li>
-                    <li><a href="https://nodejs.org/" target="_blank">Node.js</a> installed on your system. The plugin executes the <code>node</code> command, so it must be in your system's PATH.</li>
-                </ul>
-                <h3>Steps</h3>
-                <ol>
-                    <li><strong>Download:</strong> Get the latest <code>.rmskin</code> package from the <a href="#download">Download</a> section.</li>
-                    <li><strong>Install:</strong> Double-click the <code>.rmskin</code> file to install the plugin using the Rainmeter Skin Installer.</li>
-                    <li><strong>Verify:</strong> After installation, the <code>NodeJS.dll</code> file should be located in your Rainmeter plugins directory (e.g., <code>C:\Users\YourName\Documents\Rainmeter\Skins\YourSkin\@Resources\Plugins</code> or <code>C:\Program Files\Rainmeter\Plugins</code>).</li>
-                </ol>
-            </section>
-            
-            <hr class="my-12">
+        <section id="installation">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Installation
+          </h2>
+          <h3>Requirements</h3>
+          <ul>
+            <li>Rainmeter 4.3 or higher.</li>
+            <li>
+              <a href="https://nodejs.org/" target="_blank">Node.js</a>
+              installed on your system. The plugin executes the
+              <code>node</code> command, so it must be in your system's PATH.
+            </li>
+          </ul>
+          <h3>Steps</h3>
+          <ol>
+            <li>
+              <strong>Download:</strong> Get the latest
+              <code>.rmskin</code> package from the
+              <a href="#download">Download</a> section.
+            </li>
+            <li>
+              <strong>Install:</strong> Double-click the
+              <code>.rmskin</code> file to install the plugin using the
+              Rainmeter Skin Installer.
+            </li>
+            <li>
+              <strong>Verify:</strong> After installation, the
+              <code>NodeJS.dll</code> file should be located in your Rainmeter
+              plugins directory (e.g.,
+              <code
+                >C:\Users\YourName\Documents\Rainmeter\Skins\YourSkin\@Resources\Plugins</code
+              >
+              or <code>C:\Program Files\Rainmeter\Plugins</code>).
+            </li>
+          </ol>
+        </section>
 
-            <section id="basic-usage">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Basic Usage</h2>
-                <p>Here’s a simple example of a skin that uses the NodeJS plugin to display the current Node.js version.</p>
-                
-                <h4>1. The .ini Skin File</h4>
-                <p>This measure calls the <code>version.js</code> script.</p>
-                <div class="code-container">
-<pre><code class="language-ini">[Rainmeter]
+        <hr class="my-12" />
+
+        <section id="basic-usage">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Basic Usage
+          </h2>
+          <p>
+            Here’s a simple example of a skin that uses the NodeJS plugin to
+            display the current Node.js version.
+          </p>
+
+          <h4>1. The .ini Skin File</h4>
+          <p>This measure calls the <code>version.js</code> script.</p>
+          <div class="code-container">
+            <pre><code class="language-ini">
+[Rainmeter]
 Update=1000
-DynamicWindowSize=1
+
+[Metadata]
+Name=Node JS Version
+Author=nstechbytes
+Information=Sample skin demonstrating the NodeJS plugin
+Version=v1.0
 
 [MeasureNodeVersion]
 Measure=Plugin
@@ -110,19 +301,32 @@ Plugin=NodeJS.dll
 ScriptFile=#@#scripts/version.js
 DynamicVariables=1
 
+[Rectangle_Shape]
+Meter=Shape
+Shape=Rectangle 0,0,410,200,8 | StrokeWidth 0 | FillColor 255,255,255,150
+
 [MeterNodeVersion]
 Meter=String
 MeasureName=MeasureNodeVersion
-FontSize=16
-FontColor=255,255,255
 Text="Node.js Version: %1"
-AntiAlias=1</code></pre>
-                </div>
+StringAlign=CenterCenter
+FontSize=15
+FontWeight=900
+FontColor=10,10,10
+AntiAlias=1
+X=(410/2)
+Y=(200/2)
 
-                <h4>2. The JavaScript File (scripts/version.js)</h4>
-                <p>This script defines an <code>update()</code> function that returns the Node.js version string.</p>
-                <div class="code-container">
-<pre><code class="language-javascript">function update() {
+</code></pre>
+          </div>
+
+          <h4>2. The JavaScript File (scripts/version.js)</h4>
+          <p>
+            This script defines an <code>update()</code> function that returns
+            the Node.js version string.
+          </p>
+          <div class="code-container">
+            <pre><code class="language-javascript">function update() {
   // process is a global Node.js object
   return process.version;
 }
@@ -130,193 +334,345 @@ AntiAlias=1</code></pre>
 module.exports = {
   update
 };</code></pre>
-                </div>
-            </section>
+          </div>
+        </section>
 
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="options">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Options / Parameters</h2>
-                <p>These are the options available for a plugin measure.</p>
-                <dl>
-                    <dt class="font-bold mt-4"><code>Plugin</code></dt>
-                    <dd>Should be set to <code>NodeJS.dll</code>.</dd>
+        <section id="options">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Options / Parameters
+          </h2>
+          <p>These are the options available for a plugin measure.</p>
+          <dl>
+            <dt class="font-bold mt-4"><code>Plugin</code></dt>
+            <dd>Should be set to <code>NodeJS.dll</code>.</dd>
 
-                    <dt class="font-bold mt-4"><code>ScriptFile</code></dt>
-                    <dd>The path to your external <code>.js</code> file. Relative paths using <code>#@#</code> are recommended.</dd>
+            <dt class="font-bold mt-4"><code>ScriptFile</code></dt>
+            <dd>
+              The path to your external <code>.js</code> file. Relative paths
+              using <code>#@#</code> are recommended.
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>Line</code></dt>
-                    <dd>The first line of an inline JavaScript script. Use this for very short, simple scripts instead of an external file.</dd>
+            <dt class="font-bold mt-4"><code>Line</code></dt>
+            <dd>
+              The first line of an inline JavaScript script. Use this for very
+              short, simple scripts instead of an external file.
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>Line2</code>, <code>Line3</code>, ...</dt>
-                    <dd>Subsequent lines for an inline script. The plugin will read <code>LineN</code> options sequentially until it finds one that is not defined.</dd>
+            <dt class="font-bold mt-4">
+              <code>Line2</code>, <code>Line3</code>, ...
+            </dt>
+            <dd>
+              Subsequent lines for an inline script. The plugin will read
+              <code>LineN</code> options sequentially until it finds one that is
+              not defined.
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>DynamicVariables</code></dt>
-                    <dd>Set to <code>1</code> to allow the use of section variables in the measure's string value.</dd>
-                </dl>
-                <div class="mt-6 p-4 border border-blue-300/50 rounded-lg bg-blue-500/10">
-                    <h3 class="text-xl font-bold tracking-tight !mt-0">Important Note on <code>require()</code></h3>
-                    <p class="!mb-0">The Node.js <code>require()</code> function is fully supported when using <strong><code>ScriptFile</code></strong>. This allows you to import npm modules (like <code>axios</code>, <code>fs</code>, etc.). To use an npm module, you must first install it in the same directory as your script file (e.g., by running <code>npm install axios</code> in your script's folder, which will create a <code>node_modules</code> directory). However, <code>require()</code> is <strong>not available</strong> for inline scripts defined with the <code>Line</code>, <code>Line2</code>, etc. options.</p>
-                </div>
-            </section>
+            <dt class="font-bold mt-4"><code>DynamicVariables</code></dt>
+            <dd>
+              Set to <code>1</code> to allow the use of section variables in the
+              measure's string value.
+            </dd>
+          </dl>
+          <div
+            class="mt-6 p-4 border border-blue-300/50 rounded-lg bg-blue-500/10"
+          >
+            <h3 class="text-xl font-bold tracking-tight !mt-0">
+              Important Note on <code>require()</code>
+            </h3>
+            <p class="!mb-0">
+              The Node.js <code>require()</code> function is fully supported
+              when using <strong><code>ScriptFile</code></strong
+              >. This allows you to import npm modules (like <code>axios</code>,
+              <code>fs</code>, etc.). To use an npm module, you must first
+              install it in the same directory as your script file (e.g., by
+              running <code>npm install axios</code> in your script's folder,
+              which will create a <code>node_modules</code> directory). However,
+              <code>require()</code> is <strong>not available</strong> for
+              inline scripts defined with the <code>Line</code>,
+              <code>Line2</code>, etc. options.
+            </p>
+          </div>
+        </section>
 
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="functions">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Core Functions</h2>
-                <p>The plugin looks for specific exported functions within your JavaScript file or inline script. All functions can be synchronous or asynchronous (return a Promise).</p>
-                <dl>
-                    <dt class="font-bold mt-4"><code>initialize()</code></dt>
-                    <dd>
-                        <p>Called once when the measure is first loaded or refreshed. Useful for setting up initial state or performing one-time setup tasks. The value returned will be set as the measure's initial value.</p>
-                        <div class="code-container">
-<pre><code class="language-javascript">function initialize() {
+        <section id="functions">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Core Functions
+          </h2>
+          <p>
+            The plugin looks for specific exported functions within your
+            JavaScript file or inline script. All functions can be synchronous
+            or asynchronous (return a Promise).
+          </p>
+          <dl>
+            <dt class="font-bold mt-4"><code>initialize()</code></dt>
+            <dd>
+              <p>
+                Called once when the measure is first loaded or refreshed.
+                Useful for setting up initial state or performing one-time setup
+                tasks. The value returned will be set as the measure's initial
+                value.
+              </p>
+              <div class="code-container">
+                <pre><code class="language-javascript">function initialize() {
   console.log('Script Initialized!');
   return 'Ready';
 }</code></pre>
-                        </div>
-                    </dd>
+              </div>
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>update()</code></dt>
-                    <dd>
-                        <p>Called on every skin update cycle. This is the main function for fetching and returning data. The returned value (string or number) becomes the measure's new value.</p>
-                        <div class="code-container">
-<pre><code class="language-javascript">let count = 0;
+            <dt class="font-bold mt-4"><code>update()</code></dt>
+            <dd>
+              <p>
+                Called on every skin update cycle. This is the main function for
+                fetching and returning data. The returned value (string or
+                number) becomes the measure's new value.
+              </p>
+              <div class="code-container">
+                <pre><code class="language-javascript">let count = 0;
 function update() {
   count++;
   return `Update count: ${count}`;
 }</code></pre>
-                        </div>
-                    </dd>
+              </div>
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>YourCustomFunction()</code></dt>
-                    <dd>
-                        <p>Any other exported function can be called on demand using bangs. This is powerful for triggering actions without waiting for an update cycle.</p>
-                        <div class="code-container">
-<pre><code class="language-javascript">function sayHello(name) {
+            <dt class="font-bold mt-4"><code>YourCustomFunction()</code></dt>
+            <dd>
+              <p>
+                Any other exported function can be called on demand using bangs.
+                This is powerful for triggering actions without waiting for an
+                update cycle.
+              </p>
+              <div class="code-container">
+                <pre><code class="language-javascript">function sayHello(name) {
   return `Hello, ${name}!`;
 }
 
 module.exports = {
   sayHello
 };</code></pre>
-                        </div>
-                        <p>You can call this with a bang:</p>
-                        <div class="code-container">
-<pre><code class="language-ini">LeftMouseUpAction=[!ExecuteBang "sayHello('World')" "MeasureName"]</code></pre>
-                        </div>
-                    </dd>
-                </dl>
-            </section>
+              </div>
+              <p>You can call this with a bang:</p>
+              <div class="code-container">
+                <pre><code class="language-ini">LeftMouseUpAction=[!CommandMeasure  MeasureName  "sayHello('World')"]</code></pre>
+              </div>
+            </dd>
+          </dl>
+        </section>
 
-            <hr class="my-12">
-            
-            <section id="rm-api">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">RM API (in JS)</h2>
-                <p>The plugin exposes a global <code>RM</code> object in your Node.js script, allowing you to interact with the Rainmeter API. This enables powerful two-way communication where your script can read skin variables, execute bangs, and get information about the skin environment.</p>
-                
-                <h3>Available RM Functions</h3>
-                <p>All functions that read data from Rainmeter are synchronous from the perspective of your script; the plugin handles the two-way communication with the host process.</p>
-                <dl>
-                    <dt class="font-bold mt-4"><code>RM.Execute(command)</code></dt>
-                    <dd>Executes a Rainmeter bang. This is a fire-and-forget action.</dd>
-                    <dd><strong>Parameters:</strong> <code>command</code> (string) - The bang to execute (e.g., <code>'!Log "Hello"'</code>, <code>'!ToggleMeter "MyMeter"'</code>).</dd>
+        <hr class="my-12" />
 
-                    <dt class="font-bold mt-4"><code>RM.GetVariable(name, defaultValue)</code></dt>
-                    <dd>Gets the value of a Rainmeter variable.</dd>
-                    <dd><strong>Parameters:</strong> <code>name</code> (string) - The name of the variable to get. <code>defaultValue</code> (string, optional) - The value to return if the variable doesn't exist.</dd>
-                    <dd><strong>Returns:</strong> (string) The variable's value.</dd>
+        <section id="rm-api">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            RM API (in JS)
+          </h2>
+          <p>
+            The plugin exposes a global <code>RM</code> object in your Node.js
+            script, allowing you to interact with the Rainmeter API. This
+            enables powerful two-way communication where your script can read
+            skin variables, execute bangs, and get information about the skin
+            environment.
+          </p>
 
-                    <dt class="font-bold mt-4"><code>RM.ReadString(option, defaultValue)</code></dt>
-                    <dd>Reads a string value from the current measure's section in the .ini file.</dd>
-                    <dd><strong>Parameters:</strong> <code>option</code> (string) - The key to read. <code>defaultValue</code> (string, optional) - The default value.</dd>
-                    <dd><strong>Returns:</strong> (string) The option's value.</dd>
+          <h3>Available RM Functions</h3>
+          <p>
+            All functions that read data from Rainmeter are synchronous from the
+            perspective of your script; the plugin handles the two-way
+            communication with the host process.
+          </p>
+          <dl>
+            <dt class="font-bold mt-4"><code>RM.Execute(command)</code></dt>
+            <dd>
+              Executes a Rainmeter bang. This is a fire-and-forget action.
+            </dd>
+            <dd>
+              <strong>Parameters:</strong> <code>command</code> (string) - The
+              bang to execute (e.g., <code>'!Log "Hello"'</code>,
+              <code>'!ToggleMeter "MyMeter"'</code>).
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>RM.ReadDouble(option, defaultValue)</code></dt>
-                    <dd>Reads a numeric value from the current measure's section.</dd>
-                    <dd><strong>Parameters:</strong> <code>option</code> (string) - The key to read. <code>defaultValue</code> (number, optional) - The default value.</dd>
-                    <dd><strong>Returns:</strong> (number) The option's value, parsed as a float.</dd>
+            <dt class="font-bold mt-4">
+              <code>RM.GetVariable(name, defaultValue)</code>
+            </dt>
+            <dd>Gets the value of a Rainmeter variable.</dd>
+            <dd>
+              <strong>Parameters:</strong> <code>name</code> (string) - The name
+              of the variable to get. <code>defaultValue</code> (string,
+              optional) - The value to return if the variable doesn't exist.
+            </dd>
+            <dd><strong>Returns:</strong> (string) The variable's value.</dd>
 
-                    <dt class="font-bold mt-4"><code>RM.ReadInt(option, defaultValue)</code></dt>
-                    <dd>Reads an integer value from the current measure's section.</dd>
-                    <dd><strong>Parameters:</strong> <code>option</code> (string) - The key to read. <code>defaultValue</code> (number, optional) - The default value.</dd>
-                    <dd><strong>Returns:</strong> (number) The option's value, parsed as an integer.</dd>
-                    
-                    <dt class="font-bold mt-4"><code>RM.ReadStringFromSection(section, option, defaultValue)</code></dt>
-                    <dd>Reads a string value from a different section in the .ini file.</dd>
-                    <dd><strong>Parameters:</strong> <code>section</code> (string) - The section to read from. <code>option</code> (string) - The key to read. <code>defaultValue</code> (string, optional) - The default value.</dd>
-                    <dd><strong>Returns:</strong> (string) The option's value.</dd>
+            <dt class="font-bold mt-4">
+              <code>RM.ReadString(option, defaultValue)</code>
+            </dt>
+            <dd>
+              Reads a string value from the current measure's section in the
+              .ini file.
+            </dd>
+            <dd>
+              <strong>Parameters:</strong> <code>option</code> (string) - The
+              key to read. <code>defaultValue</code> (string, optional) - The
+              default value.
+            </dd>
+            <dd><strong>Returns:</strong> (string) The option's value.</dd>
 
-                    <dt class="font-bold mt-4"><code>RM.GetMeasureName()</code></dt>
-                    <dd>Gets the name of the current measure.</dd>
-                    <dd><strong>Returns:</strong> (string) The measure's name.</dd>
+            <dt class="font-bold mt-4">
+              <code>RM.ReadDouble(option, defaultValue)</code>
+            </dt>
+            <dd>Reads a numeric value from the current measure's section.</dd>
+            <dd>
+              <strong>Parameters:</strong> <code>option</code> (string) - The
+              key to read. <code>defaultValue</code> (number, optional) - The
+              default value.
+            </dd>
+            <dd>
+              <strong>Returns:</strong> (number) The option's value, parsed as a
+              float.
+            </dd>
 
-                    <dt class="font-bold mt-4"><code>RM.GetSkinName()</code></dt>
-                    <dd>Gets the name of the current skin.</dd>
-                    <dd><strong>Returns:</strong> (string) The skin's name.</dd>
-                    
-                    <dt class="font-bold mt-4"><code>RM.GetSkin()</code></dt>
-                    <dd>Gets a handle (a unique identifier) for the current skin.</dd>
-                    <dd><strong>Returns:</strong> (string) The skin handle.</dd>
-                    
-                    <dt class="font-bold mt-4"><code>RM.GetSkinWindow()</code></dt>
-                    <dd>Gets a handle (a unique identifier) for the current skin's window.</dd>
-                    <dd><strong>Returns:</strong> (string) The skin window handle.</dd>
-                </dl>
-            </section>
-            
-            <hr class="my-12">
+            <dt class="font-bold mt-4">
+              <code>RM.ReadInt(option, defaultValue)</code>
+            </dt>
+            <dd>Reads an integer value from the current measure's section.</dd>
+            <dd>
+              <strong>Parameters:</strong> <code>option</code> (string) - The
+              key to read. <code>defaultValue</code> (number, optional) - The
+              default value.
+            </dd>
+            <dd>
+              <strong>Returns:</strong> (number) The option's value, parsed as
+              an integer.
+            </dd>
 
-            <section id="section-variables">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Section Variables</h2>
-                <p>A powerful feature of the plugin is the ability to call a JavaScript function directly from within a meter's options using a special section variable syntax. This allows you to get dynamic values without needing bangs or separate measures.</p>
-                <p>The syntax is: <code>[&amp;MeasureName:Call("functionName(arguments)")]</code></p>
-                <p>When Rainmeter parses the meter, it will execute the specified JavaScript function from the script associated with <code>MeasureName</code> and substitute the returned value directly into the option.</p>
-                
-                <h3>Example: Direct Function Call in a Meter</h3>
-                <p>This example demonstrates calling a <code>sum()</code> function from an inline script and displaying the result directly in a String meter.</p>
-                <div class="code-container">
-<pre><code class="language-ini">[Rainmeter]
+            <dt class="font-bold mt-4">
+              <code
+                >RM.ReadStringFromSection(section, option, defaultValue)</code
+              >
+            </dt>
+            <dd>
+              Reads a string value from a different section in the .ini file.
+            </dd>
+            <dd>
+              <strong>Parameters:</strong> <code>section</code> (string) - The
+              section to read from. <code>option</code> (string) - The key to
+              read. <code>defaultValue</code> (string, optional) - The default
+              value.
+            </dd>
+            <dd><strong>Returns:</strong> (string) The option's value.</dd>
+
+            <dt class="font-bold mt-4"><code>RM.GetMeasureName()</code></dt>
+            <dd>Gets the name of the current measure.</dd>
+            <dd><strong>Returns:</strong> (string) The measure's name.</dd>
+
+            <dt class="font-bold mt-4"><code>RM.GetSkinName()</code></dt>
+            <dd>Gets the name of the current skin.</dd>
+            <dd><strong>Returns:</strong> (string) The skin's name.</dd>
+
+            <dt class="font-bold mt-4"><code>RM.GetSkin()</code></dt>
+            <dd>Gets a handle (a unique identifier) for the current skin.</dd>
+            <dd><strong>Returns:</strong> (string) The skin handle.</dd>
+
+            <dt class="font-bold mt-4"><code>RM.GetSkinWindow()</code></dt>
+            <dd>
+              Gets a handle (a unique identifier) for the current skin's window.
+            </dd>
+            <dd><strong>Returns:</strong> (string) The skin window handle.</dd>
+          </dl>
+        </section>
+
+        <hr class="my-12" />
+
+        <section id="section-variables">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Section Variables
+          </h2>
+          <p>
+            A powerful feature of the plugin is the ability to call a JavaScript
+            function directly from within a meter's options using a special
+            section variable syntax. This allows you to get dynamic values
+            without needing bangs or separate measures.
+          </p>
+          <p>
+            The syntax is:
+            <code>[&amp;MeasureName:Call("functionName(arguments)")]</code>
+          </p>
+          <p>
+            When Rainmeter parses the meter, it will execute the specified
+            JavaScript function from the script associated with
+            <code>MeasureName</code> and substitute the returned value directly
+            into the option.
+          </p>
+
+          <h3>Example: Direct Function Call in a Meter</h3>
+          <p>
+            This example demonstrates calling a <code>sum()</code> function from
+            an inline script and displaying the result directly in a String
+            meter.
+          </p>
+          <div class="code-container">
+            <pre><code class="language-ini">
+[Rainmeter]
 Update=8000
-AccurateText=1
-BackgroundMode=2
-SolidColor=255,255,255
+
+[Metadata]
+Name=Sum
+Author=nstechbytes
+Information=Sample skin demonstrating the NodeJS plugin
+Version=v1.0
+License=MIT
 
 [MeasureNodeJS]
 Measure=Plugin
-Plugin=NodeJS.dll
-Line=function sum(a, b) {
-Line2=  return a + b;
+Plugin=NodeJS
+Line=function sum() {
+Line2=return 5 + 2;
 Line3=}
 Line4=module.exports = { sum };
+
+[Rectangle_Shape]
+Meter=Shape
+Shape=Rectangle 0,0,310,100,8 | StrokeWidth 0 | FillColor 255,255,255,150
 
 [MeterText]
 Meter=String
 MeasureName=MeasureNodeJS
-X=10
-Y=10
-W=150
-H=40
+Text=Sum of 5+2 is: [&MeasureNodeJS:Call("sum(5,2)")]
+X=(310/2)
+Y=(100/2)
+StringAlign=CenterCenter
+FontSize=15
 FontColor=10,10,10
-FontSize=12
-FontFace=Segoe UI
+ClipString=2
 AntiAlias=1
-Text=Sum of 5+2 is: [&amp;MeasureNodeJS:Call("sum(5,2)")]
-DynamicVariables=1</code></pre>
-                </div>
-                <p>In this case, <code>[&amp;MeasureNodeJS:Call("sum(5,2)")]</code> is executed, the <code>sum(5, 2)</code> function in the script runs and returns <code>7</code>. The final text of the meter becomes "Sum of 5+2 is: 7".</p>
-            </section>
+DynamicVariables=1
+</code></pre>
+          </div>
+          <p>
+            In this case, <code>[&amp;MeasureNodeJS:Call("sum(5,2)")]</code> is
+            executed, the <code>sum(5, 2)</code> function in the script runs and
+            returns <code>7</code>. The final text of the meter becomes "Sum of
+            5+2 is: 7".
+          </p>
+        </section>
 
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="examples">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Examples</h2>
-                
-                <h3>Example 1: Asynchronous API Fetch</h3>
-                <p>This example fetches a random joke from an API. Because it's an async operation, it doesn't freeze Rainmeter while waiting for the network response.</p>
-                <h4>joke.ini</h4>
-                <div class="code-container">
-<pre><code class="language-ini">[Rainmeter]
+        <section id="examples">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">Examples</h2>
+
+          <h3>Example 1: Asynchronous API Fetch</h3>
+          <p>
+            This example fetches a random joke from an API. Because it's an
+            async operation, it doesn't freeze Rainmeter while waiting for the
+            network response.
+          </p>
+          <h4>joke.ini</h4>
+          <div class="code-container">
+            <pre><code class="language-ini">[Rainmeter]
 Update=5000
 DynamicWindowSize=1
 SolidColor=255,255,255
@@ -327,6 +683,7 @@ Name=NodeJS Plugin Sample
 Author=nstechbytes
 Information=Sample skin demonstrating the NodeJS plugin
 Version=
+License=
 
 [MeasureJoke]
 Measure=Plugin
@@ -344,11 +701,14 @@ FontSize=12
 FontColor=10,10,10
 Text="%1"
 AntiAlias=1</code></pre>
-                </div>
-                <h4>scripts/joke.js</h4>
-                <p>You'll need to install <code>axios</code> by running <code>npm install axios</code> in your script's directory.</p>
-                <div class="code-container">
-<pre><code class="language-javascript">
+          </div>
+          <h4>scripts/joke.js</h4>
+          <p>
+            You'll need to install <code>axios</code> by running
+            <code>npm install axios</code> in your script's directory.
+          </p>
+          <div class="code-container">
+            <pre><code class="language-javascript">
 const axios = require('axios');
 
 
@@ -374,135 +734,258 @@ module.exports = {
   initialize
 };
 </code></pre>
-                </div>
+          </div>
 
-                <h3>Example 2: Inline Script with Bangs</h3>
-                <p>This example uses an inline script to manage a simple counter. Bangs are used to increment, decrement, and reset the counter.</p>
-                <h4>counter.ini</h4>
-                <div class="code-container">
-<pre><code class="language-ini">[Rainmeter]
-Update=1000
-DynamicWindowSize=1
+          <h3>Example 2: Inline Script with Bangs</h3>
+          <p>
+            This example uses an inline script to manage a simple counter. Bangs
+            are used to increment, decrement, and reset the counter.
+          </p>
+          <h4>counter.ini</h4>
+          <div class="code-container">
+            <pre><code class="language-ini">
+[Rainmeter]
+Update=100
 
-[Variables]
-Counter=0
+[Metadata]
+Name=Counter
+Author=nstechbytes
+Information=Sample skin demonstrating the NodeJS plugin
+Version=v1.0
+License=MIT
 
 [MeasureCounter]
 Measure=Plugin
 Plugin=NodeJS.dll
-Line=let count = #Counter#;
-Line2=function increment() { return ++count; }
-Line3=function decrement() { return --count; }
-Line4=function update() { return count; }
-Line5=module.exports = { update, increment, decrement };
-DynamicVariables=1
+Line=let count = 20;
+Line2=function incrementValue() { count++; return count; }
+Line3=function decrementValue() { count--; return count; }
+Line4=function initialize() { console.log("initializing"); count++;  return count; }
+Line5=module.exports = { initialize, incrementValue, decrementValue };
+
+[Rectangle_Shape]
+Meter=Shape
+Shape=Rectangle 0,0,300,100,8 | StrokeWidth 0 | FillColor 255,255,255,150
 
 [MeterCounter]
 Meter=String
 MeasureName=MeasureCounter
-FontSize=24
-FontColor=255,255,255
-Text="Count: %1"
+W=300
+H=100
+X=(200/2)
+Y=(100/2)
+StringAlign=CenterCenter
+FontSize=18
+FontWeight=900
+FontColor=10,10,10
+Text=Count: %1
 AntiAlias=1
 
 [MeterIncrement]
-Meter=Button
-ButtonText="+"
-LeftMouseUpAction=[!ExecuteBang "increment()" "MeasureCounter"][!UpdateMeasure "MeasureCounter"][!UpdateMeter *][!Redraw]
+Meter=String
+Text="+"
+W=20
+H=20
+X=250
+Y=-10r
+SolidColor=109,240,9,255
+FontColor=255,255,255
+FontSize=15
+StringAlign=CenterCenter
+LeftMouseUpAction=[!CommandMeasure MeasureCounter "incrementValue()"]
 
 [MeterDecrement]
-Meter=Button
-ButtonText="-"
-X=0R
-Y=5R
-LeftMouseUpAction=[!ExecuteBang "decrement()" "MeasureCounter"][!UpdateMeasure "MeasureCounter"][!UpdateMeter *][!Redraw]</code></pre>
-                </div>
-            </section>
-            
-            <hr class="my-12">
+Meter=String
+Text="-"
+W=20
+H=20
+X=250
+Y=2R
+StringAlign=CenterCenter
+SolidColor=207,12,12,255
+FontColor=255,255,255
+FontSize=15
+LeftMouseUpAction=[!CommandMeasure MeasureCounter "decrementValue()"]
 
-            <section id="error-handling">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Error Handling</h2>
-                <p>The plugin is designed to report errors clearly in the Rainmeter log.</p>
-                <ul>
-                    <li><strong>Plugin Errors:</strong> Issues like "Node.js not found" or "ScriptFile not specified" will be logged by the plugin itself.</li>
-                    <li><strong>Script Errors:</strong> Syntax errors or runtime exceptions in your JavaScript code are caught and logged. The plugin uses <code>console.error</code> in the wrapper script to pipe these messages to the Rainmeter log with a <code>(Error)</code> prefix.</li>
-                    <li><strong>Logging:</strong> You can use <code>console.log()</code>, <code>console.warn()</code>, and <code>console.error()</code> in your script to send messages to the Rainmeter log. They will appear with (Notice), (Warning), and (Error) prefixes, respectively.</li>
-                </ul>
-                <div class="code-container">
-<pre><code class="language-javascript">// This will appear in the Rainmeter log
+</code></pre>
+          </div>
+        </section>
+
+        <hr class="my-12" />
+
+        <section id="error-handling">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Error Handling
+          </h2>
+          <p>
+            The plugin is designed to report errors clearly in the Rainmeter
+            log.
+          </p>
+          <ul>
+            <li>
+              <strong>Plugin Errors:</strong> Issues like "Node.js not found" or
+              "ScriptFile not specified" will be logged by the plugin itself.
+            </li>
+            <li>
+              <strong>Script Errors:</strong> Syntax errors or runtime
+              exceptions in your JavaScript code are caught and logged. The
+              plugin uses <code>console.error</code> in the wrapper script to
+              pipe these messages to the Rainmeter log with a
+              <code>(Error)</code> prefix.
+            </li>
+            <li>
+              <strong>Logging:</strong> You can use <code>console.log()</code>,
+              <code>console.warn()</code>, and <code>console.error()</code> in
+              your script to send messages to the Rainmeter log. They will
+              appear with (Notice), (Warning), and (Error) prefixes,
+              respectively.
+            </li>
+          </ul>
+          <div class="code-container">
+            <pre><code class="language-javascript">// This will appear in the Rainmeter log
 console.log('This is a standard log message.');
 console.warn('This is a warning.');
 console.error('This is an error message.');</code></pre>
-                </div>
-            </section>
-            
-            <hr class="my-12">
+          </div>
+        </section>
 
-            <section id="advanced-usage">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Advanced Usage</h2>
-                <h3>Calling Functions with Arguments</h3>
-                <p>You can pass arguments to your custom functions via <code>!ExecuteBang</code>. Ensure your arguments are properly quoted if they contain spaces.</p>
-                <div class="code-container">
-<pre><code class="language-ini">LeftMouseUpAction=[!ExecuteBang "myFunction('some value', 123)" "MyMeasure"]</code></pre>
-                </div>
-                <h3>Working Directory</h3>
-                <p>When you use <code>ScriptFile</code>, the working directory for the Node.js process is set to the directory containing that script. This means you can easily use relative paths to require other modules or read local files (e.g., <code>require('./lib/helper.js')</code>).</p>
-                <h3>Asynchronous Initialization</h3>
-                <p>The <code>initialize</code> function can also be async. The plugin will wait for the promise to resolve before proceeding. This is useful for setting up connections or loading data that is needed before the first update.</p>
-            </section>
+        <hr class="my-12" />
 
-            <hr class="my-12">
+        <section id="advanced-usage">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Advanced Usage
+          </h2>
+          <h3>Calling Functions with Arguments</h3>
+          <p>
+            You can pass arguments to your custom functions via
+            <code>!ExecuteBang</code>. Ensure your arguments are properly quoted
+            if they contain spaces.
+          </p>
+          <div class="code-container">
+            <pre><code class="language-ini">LeftMouseUpAction=[!CommandMeasure  MyMeasure "myFunction('some value', 123)"]</code></pre>
+          </div>
+          <h3>Working Directory</h3>
+          <p>
+            When you use <code>ScriptFile</code>, the working directory for the
+            Node.js process is set to the directory containing that script. This
+            means you can easily use relative paths to require other modules or
+            read local files (e.g., <code>require('./lib/helper.js')</code>).
+          </p>
+          <h3>Asynchronous Initialization</h3>
+          <p>
+            The <code>initialize</code> function can also be async. The plugin
+            will wait for the promise to resolve before proceeding. This is
+            useful for setting up connections or loading data that is needed
+            before the first update.
+          </p>
+        </section>
 
-            <section id="limitations">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Limitations</h2>
-                <ul>
-                    <li><strong>Node.js Dependency:</strong> The user must have Node.js installed and accessible via their system's PATH.</li>
-                    <li><strong>Performance:</strong> While the plugin is efficient, running very complex, CPU-intensive scripts on every update can still impact system performance. Use asynchronous operations for heavy tasks.</li>
-                    <li><strong>Process Overhead:</strong> Each plugin measure starts a Node.js process. While lightweight, having hundreds of measures could increase memory usage.</li>
-                    <li><strong>Inline Script Size:</strong> Inline scripts are practical for small snippets. For anything complex, <code>ScriptFile</code> is the recommended approach. Rainmeter has a limit on the length of an option value.</li>
-                </ul>
-            </section>
-            
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="faq">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">FAQ</h2>
-                <dl>
-                    <dt class="font-bold mt-4">Q: Can I use ES Modules (<code>import</code>/<code>export</code>)?</dt>
-                    <dd>A: The plugin currently uses a CommonJS (<code>require</code>/<code>module.exports</code>) wrapper. While you might be able to use libraries that transpile ES Modules, the native entry point for your script must be CommonJS.</dd>
-                    
-                    <dt class="font-bold mt-4">Q: How do I debug my scripts?</dt>
-                    <dd>A: Your primary debugging tool is the Rainmeter log. Use <code>console.log()</code> and <code>console.error()</code> liberally in your script to trace execution and inspect variables. You can also run your script directly with <code>node yourscript.js</code> in a terminal to catch errors outside of the Rainmeter environment.</dd>
+        <section id="limitations">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            Limitations
+          </h2>
+          <ul>
+            <li>
+              <strong>Node.js Dependency:</strong> The user must have Node.js
+              installed and accessible via their system's PATH.
+            </li>
+            <li>
+              <strong>Performance:</strong> While the plugin is efficient,
+              running very complex, CPU-intensive scripts on every update can
+              still impact system performance. Use asynchronous operations for
+              heavy tasks.
+            </li>
+            <li>
+              <strong>Process Overhead:</strong> Each plugin measure starts a
+              Node.js process. While lightweight, having hundreds of measures
+              could increase memory usage.
+            </li>
+            <li>
+              <strong>Inline Script Size:</strong> Inline scripts are practical
+              for small snippets. For anything complex,
+              <code>ScriptFile</code> is the recommended approach. Rainmeter has
+              a limit on the length of an option value.
+            </li>
+          </ul>
+        </section>
 
-                    <dt class="font-bold mt-4">Q: Why is my async function not updating the meter?</dt>
-                    <dd>A: The <code>update</code> function is called asynchronously in the background. The result of its promise is used to update the measure's value on a subsequent skin cycle. There may be a one-cycle delay before the value appears. Ensure your async function actually returns a value or resolves a promise with a value.</dd>
-                </dl>
-            </section>
-            
-            <hr class="my-12">
+        <hr class="my-12" />
 
-            <section id="download">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">Download</h2>
-                <p>You can download the latest version of the NodeJS plugin from the official GitHub repository or the Rainmeter forums (links to be added).</p>
-                <a href="#" class="inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600">Download Latest .rmskin</a>
-            </section>
+        <section id="faq">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">FAQ</h2>
+          <dl>
+            <dt class="font-bold mt-4">
+              Q: Can I use ES Modules (<code>import</code>/<code>export</code>)?
+            </dt>
+            <dd>
+              A: The plugin currently uses a CommonJS
+              (<code>require</code>/<code>module.exports</code>) wrapper. While
+              you might be able to use libraries that transpile ES Modules, the
+              native entry point for your script must be CommonJS.
+            </dd>
 
-            <hr class="my-12">
+            <dt class="font-bold mt-4">Q: How do I debug my scripts?</dt>
+            <dd>
+              A: Your primary debugging tool is the Rainmeter log. Use
+              <code>console.log()</code> and
+              <code>console.error()</code> liberally in your script to trace
+              execution and inspect variables. You can also run your script
+              directly with <code>node yourscript.js</code> in a terminal to
+              catch errors outside of the Rainmeter environment.
+            </dd>
 
-            <section id="license">
-                <h2 class="text-4xl font-extrabold tracking-tight mb-6">License & Credits</h2>
-                <p><strong>Author:</strong> nstechbytes</p>
-                <p><strong>License:</strong> MIT License</p>
-                <p>This plugin was built using the official Rainmeter Plugin SDK. Special thanks to the Rainmeter community for their support and resources.</p>
-            </section>
+            <dt class="font-bold mt-4">
+              Q: Why is my async function not updating the meter?
+            </dt>
+            <dd>
+              A: The <code>update</code> function is called asynchronously in
+              the background. The result of its promise is used to update the
+              measure's value on a subsequent skin cycle. There may be a
+              one-cycle delay before the value appears. Ensure your async
+              function actually returns a value or resolves a promise with a
+              value.
+            </dd>
+          </dl>
+        </section>
 
-        </main>
+        <hr class="my-12" />
+
+        <section id="download">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">Download</h2>
+          <p>
+            You can download the latest version of the NodeJS plugin from the
+            official GitHub repository or the Rainmeter forums (links to be
+            added).
+          </p>
+          <a
+            href="#"
+            class="inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600 mt-4"
+            >Download Latest .rmskin</a
+          >
+        </section>
+
+        <hr class="my-12" />
+
+        <section id="license">
+          <h2 class="text-4xl font-extrabold tracking-tight mb-6">
+            License & Credits
+          </h2>
+          <p><strong>Author:</strong> nstechbytes</p>
+          <p><strong>License:</strong> MIT License</p>
+          <p>
+            This plugin was built using the official Rainmeter Plugin SDK.
+            Special thanks to the Rainmeter community for their support and
+            resources.
+          </p>
+        </section>
+      </main>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 
     <script src="./script.js"></script>
-</body>
+  </body>
 </html>

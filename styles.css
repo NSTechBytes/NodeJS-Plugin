@@ -33,6 +33,9 @@ pre[class*="language-"] {
   border-radius: 0.5rem;
   border: 1px solid #4b5563; /* gray-600 */
   background-color: #1f2937; /* gray-800 */
+  /* Added fixed height and scrollbar */
+  max-height: 400px; /* Adjust as needed */
+  overflow-y: auto;
 }
 /* MODIFIED: Made selectors more specific to only target links within content blocks */
 .prose p a,
@@ -80,11 +83,13 @@ main section {
 }
 .code-container {
   position: relative;
+  /* Added margin-bottom for spacing */
+  margin-bottom: 1.5rem; /* Adjust as needed */
 }
 .copy-btn {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: 0.95rem;
+  right: 1.5rem;
   background-color: #374151; /* gray-700 */
   color: #d1d5db; /* gray-300 */
   border: 1px solid #4b5563; /* gray-600 */
