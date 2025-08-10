@@ -317,8 +317,16 @@ DynamicVariables=1</code></pre>
                 <h4>joke.ini</h4>
                 <div class="code-container">
 <pre><code class="language-ini">[Rainmeter]
-Update=10000
+Update=5000
 DynamicWindowSize=1
+SolidColor=255,255,255
+BackgroundMode=2
+
+[Metadata]
+Name=NodeJS Plugin Sample
+Author=nstechbytes
+Information=Sample skin demonstrating the NodeJS plugin
+Version=
 
 [MeasureJoke]
 Measure=Plugin
@@ -333,14 +341,20 @@ W=300
 H=100
 ClipString=1
 FontSize=12
-FontColor=255,255,255
+FontColor=10,10,10
 Text="%1"
 AntiAlias=1</code></pre>
                 </div>
                 <h4>scripts/joke.js</h4>
                 <p>You'll need to install <code>axios</code> by running <code>npm install axios</code> in your script's directory.</p>
                 <div class="code-container">
-<pre><code class="language-javascript">const axios = require('axios');
+<pre><code class="language-javascript">
+const axios = require('axios');
+
+
+function initialize() {
+  return 'Joke API Initialized';
+}
 
 async function update() {
   try {
@@ -356,8 +370,10 @@ async function update() {
 }
 
 module.exports = {
-  update
-};</code></pre>
+  update,
+  initialize
+};
+</code></pre>
                 </div>
 
                 <h3>Example 2: Inline Script with Bangs</h3>
@@ -469,15 +485,15 @@ console.error('This is an error message.');</code></pre>
             <section id="download">
                 <h2 class="text-4xl font-extrabold tracking-tight mb-6">Download</h2>
                 <p>You can download the latest version of the NodeJS plugin from the official GitHub repository or the Rainmeter forums (links to be added).</p>
-                <a href="#" class="inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600">Download Latest .rmskin (Placeholder)</a>
+                <a href="#" class="inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-600">Download Latest .rmskin</a>
             </section>
 
             <hr class="my-12">
 
             <section id="license">
                 <h2 class="text-4xl font-extrabold tracking-tight mb-6">License & Credits</h2>
-                <p><strong>Author:</strong> Your Name</p>
-                <p><strong>License:</strong> MIT License (or your chosen license)</p>
+                <p><strong>Author:</strong> nstechbytes</p>
+                <p><strong>License:</strong> MIT License</p>
                 <p>This plugin was built using the official Rainmeter Plugin SDK. Special thanks to the Rainmeter community for their support and resources.</p>
             </section>
 
