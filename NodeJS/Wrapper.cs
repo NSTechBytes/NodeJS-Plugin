@@ -21,7 +21,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                WrapperHelper.LogError(instance, $"Wrapper creation failed: {WrapperHelper.GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance, $"Wrapper creation failed: {Common.GetSimpleErrorMessage(ex)}");
             }
         }
 

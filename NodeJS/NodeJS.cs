@@ -131,7 +131,7 @@ namespace NodeJSPlugin
 
             if (string.IsNullOrWhiteSpace(instance.ScriptFile) && string.IsNullOrWhiteSpace(instance.InlineScript))
             {
-                LogError(instance, "Neither ScriptFile nor Line parameters are configured.");
+                Common.LogError(instance, "Neither ScriptFile nor Line parameters are configured.");
                 lock (instance.StateLock) { instance.State = PluginState.Uninitialized; }
                 return;
             }
@@ -161,7 +161,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                LogError(instance, $"Script initialization failed: {GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance, $"Script initialization failed: {Common.GetSimpleErrorMessage(ex)}");
                 lock (instance.StateLock) { instance.State = PluginState.Uninitialized; }
             }
         }
@@ -192,7 +192,7 @@ namespace NodeJSPlugin
                 }
                 catch (Exception ex)
                 {
-                    LogError(instance, $"Update execution failed: {GetSimpleErrorMessage(ex)}");
+                    Common.LogError(instance, $"Update execution failed: {Common.GetSimpleErrorMessage(ex)}");
                 }
             }
 
@@ -211,7 +211,7 @@ namespace NodeJSPlugin
 
             if (instance.State != PluginState.Initialized)
             {
-                LogError(instance, "Cannot execute function: Plugin not initialized.");
+                Common.LogError(instance, "Cannot execute function: Plugin not initialized.");
                 return;
             }
 
@@ -237,7 +237,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                LogError(instance, $"ExecuteBang failed: {GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance, $"ExecuteBang failed: {Common.GetSimpleErrorMessage(ex)}");
             }
         }
 
@@ -265,7 +265,7 @@ namespace NodeJSPlugin
 
             if (instance.State != PluginState.Initialized)
             {
-                LogError(instance, "Cannot execute call: Plugin not initialized.");
+                Common.LogError(instance, "Cannot execute call: Plugin not initialized.");
                 return IntPtr.Zero;
             }
 
@@ -299,7 +299,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                LogError(instance, $"Call '{argv[0]}' failed: {GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance, $"Call '{argv[0]}' failed: {Common.GetSimpleErrorMessage(ex)}");
                 return IntPtr.Zero;
             }
         }
@@ -380,17 +380,6 @@ namespace NodeJSPlugin
             }
 
             return scriptLines.Count > 0 ? string.Join("\n", scriptLines) : "";
-        }
-
-        private static void LogError(PluginInstanceData instance, string message)
-        {
-            if (instance.RmHandle != IntPtr.Zero)
-                API.Log(instance.RmHandle, API.LogType.Error, message);
-        }
-
-        private static string GetSimpleErrorMessage(Exception ex)
-        {
-            return ex.InnerException?.Message ?? ex.Message;
         }
     }
 }

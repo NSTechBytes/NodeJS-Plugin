@@ -25,16 +25,6 @@ namespace NodeJSPlugin
             catch { }
         }
 
-        public static void LogError(PluginInstanceData instance, string message)
-        {
-            API.Log(instance.RmHandle, API.LogType.Error, message);
-        }
-
-        public static string GetSimpleErrorMessage(Exception ex)
-        {
-            return ex.InnerException?.Message ?? ex.Message;
-        }
-
         public static string CreateTempWrapper(string currentWrapperPath)
         {
             try
@@ -86,7 +76,7 @@ namespace NodeJSPlugin
         {
             if (string.IsNullOrWhiteSpace(instance.WrapperPath) || !File.Exists(instance.WrapperPath))
             {
-                LogError(instance, "Wrapper file does not exist.");
+                Common.LogError(instance, "Wrapper file does not exist.");
                 return false;
             }
             return true;

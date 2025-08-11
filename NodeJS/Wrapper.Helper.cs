@@ -30,17 +30,6 @@ namespace NodeJSPlugin
             catch { }
         }
 
-        public static void LogError(PluginInstanceData instance, string message)
-        {
-            if (instance.RmHandle != IntPtr.Zero)
-                API.Log(instance.RmHandle, API.LogType.Error, message);
-        }
-
-        public static string GetSimpleErrorMessage(Exception ex)
-        {
-            return ex.InnerException?.Message ?? ex.Message;
-        }
-
         public static string GetScriptContent(PluginInstanceData instance)
         {
             if (!string.IsNullOrWhiteSpace(instance.InlineScript))

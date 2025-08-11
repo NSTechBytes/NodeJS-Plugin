@@ -85,6 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="Common.cs" />
     <Compile Include="NodeJS.cs" />
     <Compile Include="$(SolutionDir).\API\RainmeterAPI.cs" />
     <Compile Include="NodeProcess.cs" />

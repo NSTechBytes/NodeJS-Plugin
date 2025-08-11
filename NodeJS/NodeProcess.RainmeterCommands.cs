@@ -143,7 +143,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                NodeProcessHelper.LogError(instance,$"RM command failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance,$"RM command failed: {Common.GetSimpleErrorMessage(ex)}");
                 NodeProcessHelper.SendToNode(proc, "");
                 return true;
             }

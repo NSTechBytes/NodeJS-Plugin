@@ -125,7 +125,7 @@ namespace NodeJSPlugin
                 }
                 catch (Exception ex)
                 {
-                    API.Log(instance.RmHandle, API.LogType.Error, $"Persistent output handler error: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                    API.Log(instance.RmHandle, API.LogType.Error, $"Persistent output handler error: {Common.GetSimpleErrorMessage(ex)}");
                 }
             };
 
@@ -202,7 +202,7 @@ namespace NodeJSPlugin
             var persistentProc = GetOrCreatePersistentProcess(instance);
             if (persistentProc == null)
             {
-                NodeProcessHelper.LogError(instance, "Failed to create persistent Node.js process.");
+                Common.LogError(instance, "Failed to create persistent Node.js process.");
                 return (null, "");
             }
 
@@ -258,7 +258,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                NodeProcessHelper.LogError(instance, $"Persistent process execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                Common.LogError(instance, $"Persistent process execution failed: {Common.GetSimpleErrorMessage(ex)}");
                 CleanupPersistentProcess(instance);
                 return (null, "");
             }
@@ -326,7 +326,7 @@ namespace NodeJSPlugin
                 catch (Exception ex)
                 {
                     if (!token.IsCancellationRequested)
-                        API.Log(currentRmHandle, API.LogType.Error, $"Async execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                        API.Log(currentRmHandle, API.LogType.Error, $"Async execution failed: {Common.GetSimpleErrorMessage(ex)}");
                 }
                 finally
                 {
@@ -439,7 +439,7 @@ namespace NodeJSPlugin
             }
             catch (Exception ex)
             {
-                API.Log(rmHandle, API.LogType.Error, $"Async process execution failed: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                API.Log(rmHandle, API.LogType.Error, $"Async process execution failed: {Common.GetSimpleErrorMessage(ex)}");
             }
             finally
             {
@@ -471,7 +471,7 @@ namespace NodeJSPlugin
                 }
                 catch (Exception ex)
                 {
-                    API.Log(rmHandle, API.LogType.Error, $"Output handler error: {NodeProcessHelper.GetSimpleErrorMessage(ex)}");
+                    API.Log(rmHandle, API.LogType.Error, $"Output handler error: {Common.GetSimpleErrorMessage(ex)}");
                 }
             };
 
